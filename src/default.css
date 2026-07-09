@@ -1,3 +1,12 @@
+/**
+ * 文件：src/default.css
+ * 职责：全局样式与玻璃拟态设计系统（Tailwind v4 CSS-first）。
+ *       定义默认蓝色 OKLCH 调色板、明暗主题变量、@theme 令牌映射、玻璃面
+ *       增强（::before 高光 + 强模糊）以及 Electron 拖拽区 / 截图光标等。
+ *       动态主题（7 色调）由 lib/theme.ts 的 applyTheme 在运行时覆盖。
+ * 依赖：tailwindcss、tw-animate-css、shadcn/tailwind.css、@fontsource-variable/inter
+ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
