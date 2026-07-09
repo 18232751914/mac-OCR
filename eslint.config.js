@@ -1,3 +1,11 @@
+/**
+ * 文件：eslint.config.js
+ * 职责：ESLint 扁平配置。对 TS/TSX 启用推荐规则与 react-hooks 规范，
+ *       忽略 dist 与测试文件；统一浏览器全局变量。
+ * 依赖：@eslint/js、typescript-eslint、eslint-plugin-react-hooks、eslint-plugin-react-refresh、globals
+ * 导出：ESLint 配置数组
+ */
+
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'

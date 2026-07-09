@@ -1,3 +1,12 @@
+/**
+ * 文件：vite.config.ts
+ * 职责：Vite 构建与开发配置。集成 React(SWC)、Tailwind v4、tsconfig 路径别名；
+ *       内联 restartOnDepsChange（依赖变化时重启 dev）与 dynamicManifest
+ *       （按 env 动态生成 PWA manifest）；并启用 vite-plugin-checker 做类型检查。
+ * 依赖：vitest/config、@vitejs/plugin-react-swc、@tailwindcss/vite、vite-tsconfig-paths
+ * 导出：defineConfig 返回值（含 build/plugins/resolve/server/test）
+ */
+
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
