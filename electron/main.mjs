@@ -1005,30 +1005,12 @@ function createTray() {
   tray = new Tray(trayIcon);
   tray.setToolTip('Screen OCR');
 
-  // Left-click → open/toggle panel
+  // Left-click → pop up context menu
   tray.on('click', () => {
-    const win = ensurePanelWindow();
-    if (!win.isVisible()) {
-      const trayBounds = tray.getBounds();
-      const [windowWidth] = win.getSize();
-      const x = Math.round(trayBounds.x + trayBounds.width / 2 - windowWidth / 2);
-      const y = Math.round(trayBounds.y + trayBounds.height + 8);
-      win.setPosition(x, y, false);
-      win.show();
-      win.focus();
-    }
+    tray.popUpContextMenu(buildTrayContextMenu());
   });
 
-  // Right-click → context menu only
-  tray.on('right-click', (_event, bounds) => {
-    // Menu.popup requires a BrowserWindow owner. If the panel window is not
-    // yet available, use any existing window or create a hidden one so the
-    // context menu can open even when no other window is visible.
-    const win = (panelWindow && !panelWindow.isDestroyed())
-      ? panelWindow
-      : (BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? ensurePanelWindow());
-    buildTrayContextMenu().popup({ window: win, x: bounds.x, y: bounds.y });
-  });
+  // Right-click → no action (avoid competing with left-click context menu)
 }
 
 function registerScreenshotShortcut() {
