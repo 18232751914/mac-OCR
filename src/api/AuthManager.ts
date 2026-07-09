@@ -1,3 +1,12 @@
+/**
+ * 文件：src/api/AuthManager.ts
+ * 职责：鉴权业务方法集合。每个方法都是对 ApiClient.invokeMethod 的薄封装，
+ *       固定服务名为 "Api"、管理器为 "AuthManager"，并返回强类型响应。
+ * 依赖：./AppDtos（类型）、./ApiClient（调用封装）
+ * 导出：默认对象 { Login, SignUp, SendPasswordResetEmail, ChangePassword,
+ *       UpdateUserEmail, UpdateUserPassword, UpdateUserName, GetSession }
+ */
+
 import { LoginRequestDto, LoginResponseDto, SignUpRequestDto, SignUpResponseDto, SendPasswordResetRequestDto, OperationResultDto, ChangePasswordRequestDto, UpdateUserEmailDto, UpdateUserEmailResponseDto, UpdateUserNameDto, UpdateUserNameResponseDto, UpdateUserPasswordDto, UpdateUserPasswordResponseDto, GetSessionRequestDto, SessionDto } from "./AppDtos";
 import ApiClient from "./ApiClient";
 

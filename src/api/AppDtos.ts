@@ -1,3 +1,11 @@
+/**
+ * 文件：src/api/AppDtos.ts
+ * 职责：定义渲染进程与服务端之间通信的请求 / 响应数据结构（DTO）。
+ *       命名采用 PascalCase 以匹配后端契约（如 LoginRequestDto）。
+ * 依赖：无（纯类型定义）
+ * 导出：若干 interface（ChangePasswordRequestDto、LoginRequestDto、
+ *       SessionDto、ServiceInvocationRequestDto 等）
+ */
 
 export interface ChangePasswordRequestDto {
   NewPassword: string;
