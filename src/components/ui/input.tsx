@@ -1,3 +1,10 @@
+/**
+ * 文件：src/components/ui/input.tsx
+ * 职责：shadcn/ui 文本输入框。基于 cva 的基础输入样式封装。
+ * 依赖：react、@/lib/utils(cn)
+ * 导出：Input
+ */
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

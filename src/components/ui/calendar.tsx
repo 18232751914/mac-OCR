@@ -1,3 +1,10 @@
+/**
+ * 文件：src/components/ui/calendar.tsx
+ * 职责：shadcn/ui 日历组件。封装 react-day-picker，提供月/年切换与本地化。
+ * 依赖：react、react-day-picker、@/lib/utils(cn)、@/components/ui/button
+ * 导出：Calendar
+ */
+
 import * as React from "react"
 import {
   DayPicker,

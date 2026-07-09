@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/dropdown-menu.tsx
+ * 职责：shadcn/ui 下拉菜单。封装 Radix DropdownMenu，含 Trigger/Content/
+ *       Item/CheckboxItem/Sub 等完整子组件。
+ * 依赖：react、radix-ui(DropdownMenu)、@/lib/utils(cn)、lucide-react
+ * 导出：DropdownMenu 及其子组件
+ */
+
 import * as React from "react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 

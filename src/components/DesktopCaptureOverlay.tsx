@@ -1,3 +1,12 @@
+/**
+ * 文件：src/components/DesktopCaptureOverlay.tsx
+ * 职责：截图框选覆盖层（每个显示器一个透明全屏窗口）。负责拖拽框选区域、
+ *       绘制四向遮罩、ESC 取消，并通过 onConfirm 回传选区坐标；跨屏时重设
+ *       截图光标并抢焦当前窗口。
+ * 依赖：react、@/components/ui/button、window.desktopHost
+ * 导出：默认 DesktopCaptureOverlay
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -14,6 +23,7 @@ type Props = {
   onConfirm: (selection: SelectionRect) => void;
 };
 
+/** 规整选区：坐标取整，宽高至少为 1px，避免零尺寸选区。 */
 function clampSelection(selection: SelectionRect): SelectionRect {
   return {
     x: Math.round(selection.x),
@@ -76,6 +86,7 @@ const DesktopCaptureOverlay = ({ mode, onCancel, onConfirm }: Props) => {
     return { x, y };
   }
 
+  /** 由拖拽起点与当前点构造矩形选区（取最小/最大边界，支持任意方向拖拽）。 */
   function buildSelection(currentX: number, currentY: number) {
     if (!dragStart) {
       return null;

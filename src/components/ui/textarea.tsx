@@ -1,3 +1,10 @@
+/**
+ * 文件：src/components/ui/textarea.tsx
+ * 职责：shadcn/ui 多行文本框。基于 cva 的文本域样式封装。
+ * 依赖：react、@/lib/utils(cn)
+ * 导出：Textarea
+ */
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

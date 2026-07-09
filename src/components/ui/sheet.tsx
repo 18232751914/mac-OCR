@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/sheet.tsx
+ * 职责：shadcn/ui 侧边抽屉。基于 Radix Dialog 实现，含左右上下四个方向的
+ *       Overlay/Content/Header/Footer 等。
+ * 依赖：react、radix-ui(Dialog)、@/lib/utils(cn)、@/components/ui/button、lucide-react
+ * 导出：Sheet 及其子组件
+ */
+
 import * as React from "react"
 import { Dialog as SheetPrimitive } from "radix-ui"
 

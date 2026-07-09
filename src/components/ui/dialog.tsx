@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * 文件：src/components/ui/dialog.tsx
+ * 职责：shadcn/ui 对话框。封装 Radix Dialog，含 Overlay/Content/Header/
+ *       Footer/Title/Description 等，并内嵌关闭按钮。
+ * 依赖：react、radix-ui(Dialog)、@/lib/utils(cn)、@/components/ui/button、lucide-react
+ * 导出：Dialog 及其子组件
+ */
+
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 

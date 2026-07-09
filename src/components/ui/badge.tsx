@@ -1,3 +1,10 @@
+/**
+ * 文件：src/components/ui/badge.tsx
+ * 职责：shadcn/ui 徽章组件。基于 cva 生成状态/变体样式，支持 asChild 透传。
+ * 依赖：react、class-variance-authority、radix-ui(Slot)、@/lib/utils(cn)
+ * 导出：Badge、badgeVariants
+ */
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"

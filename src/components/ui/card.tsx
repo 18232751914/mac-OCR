@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/card.tsx
+ * 职责：shadcn/ui 卡片容器。导出 Card / CardHeader / CardTitle /
+ *       CardDescription / CardContent / CardFooter 等组合件。
+ * 依赖：react、@/lib/utils(cn)
+ * 导出：Card 及其子组件
+ */
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

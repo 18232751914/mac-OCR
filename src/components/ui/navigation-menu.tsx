@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/navigation-menu.tsx
+ * 职责：shadcn/ui 导航菜单。封装 Radix NavigationMenu，含 Trigger/Content/
+ *       List/Item/Link 等，cva 控制样式。
+ * 依赖：react、class-variance-authority、radix-ui(NavigationMenu)、@/lib/utils(cn)、lucide-react
+ * 导出：NavigationMenu 及其子组件
+ */
+
 import * as React from "react"
 import { cva } from "class-variance-authority"
 import { NavigationMenu as NavigationMenuPrimitive } from "radix-ui"

@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * 文件：src/components/ui/tooltip.tsx
+ * 职责：shadcn/ui 文字提示。封装 Radix Tooltip，含 Provider/Tooltip/
+ *       TooltipTrigger/TooltipContent。
+ * 依赖：react、radix-ui(Tooltip)、@/lib/utils(cn)
+ * 导出：Tooltip 及其子组件
+ */
+
 import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
 

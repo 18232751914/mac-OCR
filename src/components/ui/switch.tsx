@@ -1,3 +1,10 @@
+/**
+ * 文件：src/components/ui/switch.tsx
+ * 职责：shadcn/ui 开关。封装 Radix Switch，支持受控状态与尺寸（size）。
+ * 依赖：react、radix-ui(Switch)、@/lib/utils(cn)
+ * 导出：Switch
+ */
+
 import * as React from "react"
 import { Switch as SwitchPrimitive } from "radix-ui"
 

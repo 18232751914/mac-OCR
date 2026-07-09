@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * 文件：src/components/ui/popover.tsx
+ * 职责：shadcn/ui 气泡卡片。封装 Radix Popover，含 Trigger/Content/Anchor。
+ * 依赖：react、radix-ui(Popover)、@/lib/utils(cn)
+ * 导出：Popover 及其子组件
+ */
+
 import * as React from "react"
 import { Popover as PopoverPrimitive } from "radix-ui"
 

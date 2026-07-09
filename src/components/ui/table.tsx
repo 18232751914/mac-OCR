@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/table.tsx
+ * 职责：shadcn/ui 表格。导出 Table / TableHeader / TableBody / TableRow /
+ *       TableHead / TableCell 等基础组合件。
+ * 依赖：react、@/lib/utils(cn)
+ * 导出：Table 及其子组件
+ */
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

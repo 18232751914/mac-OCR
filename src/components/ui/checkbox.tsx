@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * 文件：src/components/ui/checkbox.tsx
+ * 职责：shadcn/ui 复选框。封装 Radix Checkbox，提供受控/非受控勾选与图标。
+ * 依赖：react、radix-ui(Checkbox)、@/lib/utils(cn)、lucide-react
+ * 导出：Checkbox
+ */
+
 import * as React from "react"
 import { Checkbox as CheckboxPrimitive } from "radix-ui"
 

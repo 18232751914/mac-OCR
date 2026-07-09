@@ -1,3 +1,10 @@
+/**
+ * 文件：src/components/ui/label.tsx
+ * 职责：shadcn/ui 表单标签。封装 Radix Label，配合表单控件使用。
+ * 依赖：react、radix-ui(Label)、@/lib/utils(cn)
+ * 导出：Label
+ */
+
 import * as React from "react"
 import { Label as LabelPrimitive } from "radix-ui"
 

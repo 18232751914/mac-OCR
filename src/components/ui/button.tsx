@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/button.tsx
+ * 职责：shadcn/ui 按钮组件。基于 cva 生成多套样式变体，支持 asChild 通过
+ *       Slot 将样式透传到子元素（如 <a>/<Link>）。
+ * 依赖：react、class-variance-authority、radix-ui(Slot)、@/lib/utils(cn)
+ * 导出：Button、buttonVariants
+ */
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"

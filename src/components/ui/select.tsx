@@ -1,3 +1,11 @@
+/**
+ * 文件：src/components/ui/select.tsx
+ * 职责：shadcn/ui 下拉选择。封装 Radix Select，含 Trigger/Content/Item/
+ *       ScrollUp/ScrollDown 等，cva 控制触发按钮样式。
+ * 依赖：react、radix-ui(Select)、@/lib/utils(cn)、lucide-react
+ * 导出：Select 及其子组件
+ */
+
 import * as React from "react"
 import { Select as SelectPrimitive } from "radix-ui"
 

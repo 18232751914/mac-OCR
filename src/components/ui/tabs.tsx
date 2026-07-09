@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * 文件：src/components/ui/tabs.tsx
+ * 职责：shadcn/ui 标签页。封装 Radix Tabs，含 TabsList/TabsTrigger/TabsContent，
+ *       cva 控制触发器样式。
+ * 依赖：react、class-variance-authority、radix-ui(Tabs)、@/lib/utils(cn)
+ * 导出：Tabs 及其子组件
+ */
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Tabs as TabsPrimitive } from "radix-ui"
