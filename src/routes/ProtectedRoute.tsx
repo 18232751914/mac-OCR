@@ -1,3 +1,12 @@
+/**
+ * 文件：src/routes/ProtectedRoute.tsx
+ * 职责：路由鉴权守卫。已登录但无 session 时尝试恢复会话（带超时）；
+ *       校验 roles 角色权限；未登录重定向首页，权限不足重定向 /unauthorized；
+ *       通过则渲染 <Outlet/>。
+ * 依赖：react、react-router-dom、@/api/AuthManager、@/auth/AuthStore、@/components/ui/button
+ * 导出：默认 ProtectedRoute
+ */
+
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import AuthManager from '@/api/AuthManager';
@@ -26,6 +35,10 @@ const ProtectedRoute = ({ roles }: ProtectedRouteProps) => {
     let cancelled = false;
     let timeoutId: number | undefined;
 
+    /**
+     * 尝试恢复会话：调用 AuthManager.GetSession 拉取最新 session，
+     * 与 15s 超时竞速；失败仅更新本地 error 状态（由 UI 提供重试）。
+     */
     const hydrate = async () => {
       setError(null);
       try {

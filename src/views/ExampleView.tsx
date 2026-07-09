@@ -1,3 +1,11 @@
+/**
+ * 文件：src/views/ExampleView.tsx
+ * 职责：根路由（/）的临时占位页。仅用于新项目有可展示页面，不应作为正式
+ *       视觉/布局参考；应用接入真实首页后替换。
+ * 依赖：@/components/ui/card、import.meta.env.VITE_APP_*
+ * 导出：默认 HomeView
+ */
+
 import { Card, CardContent } from '@/components/ui/card';
 
 /**

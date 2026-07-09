@@ -1,3 +1,10 @@
+/**
+ * 文件：src/views/NotFoundView.tsx
+ * 职责：404 页面。匹配未定义的路由（*），提供返回首页链接。
+ * 依赖：react-router-dom
+ * 导出：默认 NotFoundView
+ */
+
 import { Link } from 'react-router-dom';
 
 const NotFoundView = () => {

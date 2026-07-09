@@ -1,3 +1,12 @@
+/**
+ * 文件：src/views/DesktopShellView.tsx
+ * 职责：应用主视图，按当前 surface 渲染不同界面：panel（菜单面板）、
+ *       result（识别结果编辑）、settings（快捷键/主题/自启动）、overlay（框选）、
+ *       long-toolbar（长截图控制条）。聚合桌面宿主状态、主题、OCR 后处理与窗口自适应。
+ * 依赖：react、lucide-react、@/components/ui/*、@/lib/*、window.desktopHost
+ * 导出：默认 DesktopShellView
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -396,6 +405,10 @@ const DesktopShellView = () => {
 
   const { state, refresh } = useDesktopHostState();
 
+  /**
+   * 将一次键盘事件转换为 Electron 风格的快捷键字符串（如 "Command+Shift+1"）。
+   * 忽略纯修饰键；仅允许命名键 / 单字母数字 / F1-F12；无修饰键或非法键返回 null。
+   */
   function toAccelerator(event: React.KeyboardEvent<HTMLInputElement>) {
     const modifierParts = [
       event.metaKey ? 'Command' : null,

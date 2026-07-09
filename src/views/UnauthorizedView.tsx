@@ -1,3 +1,10 @@
+/**
+ * 文件：src/views/UnauthorizedView.tsx
+ * 职责：无权限页面。当用户缺少所需角色时由路由守卫重定向至此。
+ * 依赖：@/components/ui/button、@/components/ui/card、react-router-dom
+ * 导出：默认 UnauthorizedView
+ */
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Link as RouterLink } from 'react-router-dom';
