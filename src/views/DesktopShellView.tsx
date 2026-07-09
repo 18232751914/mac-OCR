@@ -1350,7 +1350,7 @@ const DesktopShellView = () => {
               <ScanLine className="h-5 w-5 text-primary/70 transition-colors duration-200 group-hover:text-primary" />
             </div>
             <div>
-              <div className="text-[13px] font-semibold leading-tight">普通截图</div>
+              <div className="text-[13px] font-semibold leading-tight">截图识别</div>
               <div className="mt-1 text-[10px] leading-none text-muted-foreground/55">
                 {state.shortcutPreferences.single.displayText}
               </div>
@@ -1367,7 +1367,7 @@ const DesktopShellView = () => {
               <Rows3 className="h-5 w-5 text-secondary-foreground/55 transition-colors duration-200 group-hover:text-secondary-foreground" />
             </div>
             <div>
-              <div className="text-[13px] font-semibold leading-tight">长截图</div>
+              <div className="text-[13px] font-semibold leading-tight">长截图识别</div>
               <div className="mt-1 text-[10px] leading-none text-muted-foreground/55">
                 {state.shortcutPreferences.long.displayText}
               </div>
