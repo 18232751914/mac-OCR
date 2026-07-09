@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>Stitcher</title></head>
+<body>
+<canvas id="canvas" style="display:none"></canvas>
+<canvas id="diff-a" style="display:none"></canvas>
+<canvas id="diff-b" style="display:none"></canvas>
+<script>
+const MAX_PIXEL_DIFFERENCE_PER_PIXEL = 80;
+
+function findOverlapHeight(prevDataUrl, nextDataUrl) {
+  return new Promise((resolve) => {
+    const imgA = new Image();
+    const imgB = new Image();
+    let loaded = 0;
+    function check() { if (++loaded === 2) resolve(computeOverlap(imgA, imgB)); }
+    imgA.onload = check; imgA.onerror = () => resolve(0);
+    imgB.onload = check; imgB.onerror = () => resolve(0);
+    imgA.src = prevDataUrl; imgB.src = nextDataUrl;
+  });
+}
+
+function computeOverlap(imgA, imgB) {
+  const w = Math.min(imgA.naturalWidth, imgB.naturalWidth);
+  const stripH = Math.floor(Math.min(imgA.naturalHeight, imgB.naturalHeight) * 0.3);
+  if (stripH < 4 || w < 4) return 0;
+
+  const scale = 0.25;
+  const sw = Math.max(1, Math.floor(w * scale));
+  const sh = Math.max(1, Math.floor(stripH * scale));
+  const maxOffsets = Math.max(1, Math.floor(stripH * 0.8));
+
+  // Draw bottom strip of prev
+  const ca = document.getElementById('diff-a');
+  ca.width = sw; ca.height = sh;
+  const ctxA = ca.getContext('2d');
+  ctxA.drawImage(imgA, 0, imgA.naturalHeight - stripH, w, stripH, 0, 0, sw, sh);
+  const pixelsA = ctxA.getImageData(0, 0, sw, sh).data;
+
+  // Draw top strip of next
+  const cb = document.getElementById('diff-b');
+  cb.width = sw; cb.height = sh;
+  const ctxB = cb.getContext('2d');
+  ctxB.drawImage(imgB, 0, 0, w, stripH, 0, 0, sw, sh);
+  const pixelsB = ctxB.getImageData(0, 0, sw, sh).data;
+
+  let bestOffset = 0;
+  let bestDiff = Infinity;
+
+  // Test offsets: bottom strip slides up, top strip is fixed
+  const testOffsets = [0, 1, 2, 3, 4, 6, 8, 10, 14, 18, 24, 30, 40, 50];
+  for (const offset of testOffsets) {
+    if (offset >= sh) break;
+    let totalDiff = 0;
+    const rows = sh - offset;
+    const compareStart = offset * sw * 4;
+    const totalPixels = rows * sw;
+
+    for (let i = 0; i < rows * sw * 4; i += 4) {
+      const aR = pixelsA[compareStart + i];
+      const aG = pixelsA[compareStart + i + 1];
+      const aB = pixelsA[compareStart + i + 2];
+      const bR = pixelsB[i];
+      const bG = pixelsB[i + 1];
+      const bB = pixelsB[i + 2];
+      totalDiff += Math.abs(aR - bR) + Math.abs(aG - bG) + Math.abs(aB - bB);
+    }
+
+    const avgDiff = totalDiff / (totalPixels * 3);
+    if (avgDiff < bestDiff) {
+      bestDiff = avgDiff;
+      bestOffset = offset;
+    }
+  }
+
+  // If average difference is too high, no meaningful overlap
+  if (bestDiff > MAX_PIXEL_DIFFERENCE_PER_PIXEL) return 0;
+
+  // Convert scaled offset back to original size
+  return Math.round(bestOffset / scale);
+}
+
+async function stitchImages(imageDataUrls) {
+  if (!imageDataUrls || imageDataUrls.length === 0) return null;
+  if (imageDataUrls.length === 1) return imageDataUrls[0];
+
+  // First, load all images
+  const images = [];
+  for (const url of imageDataUrls) {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Image load failed'));
+      i.src = url;
+    });
+    images.push(img);
+  }
+
+  // Compute overlap heights between consecutive pairs
+  const overlapHeights = [];
+  for (let i = 0; i < images.length - 1; i++) {
+    overlapHeights.push(await findOverlapHeight(imageDataUrls[i], imageDataUrls[i + 1]));
+  }
+
+  // Calculate total canvas dimensions
+  const canvasWidth = Math.min(...images.map((img) => img.naturalWidth));
+  let totalHeight = images[0].naturalHeight;
+  for (let i = 1; i < images.length; i++) {
+    totalHeight += images[i].naturalHeight - overlapHeights[i - 1];
+  }
+
+  const canvas = document.getElementById('canvas');
+  canvas.width = canvasWidth;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext('2d');
+
+  // Draw images vertically
+  let y = 0;
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
+    const overlap = i > 0 ? overlapHeights[i - 1] : 0;
+    const clipTop = i > 0 ? overlap : 0;
+    const sourceH = img.naturalHeight - clipTop;
+    const targetH = i === images.length - 1 ? sourceH : img.naturalHeight - clipTop;
+
+    ctx.drawImage(
+      img,
+      0, clipTop, canvasWidth, sourceH,
+      0, y, canvasWidth, targetH
+    );
+    y += targetH;
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+// Called by main process via executeJavaScript
+window.__stitchImages = stitchImages;
+</script>
+</body>
+</html>
