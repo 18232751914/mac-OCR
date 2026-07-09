@@ -1,3 +1,12 @@
+/**
+ * 文件：electron/preload.mjs
+ * 职责：预加载脚本。通过 contextBridge 把主进程能力以 window.desktopHost
+ *       暴露给渲染进程；所有方法经 ipcRenderer.invoke 与主进程通信，
+ *       subscribeShellState 通过 ipcRenderer.on 订阅状态广播。
+ * 依赖：electron（contextBridge、ipcRenderer）
+ * 导出：在 window 上挂载 desktopHost
+ */
+
 import { contextBridge, ipcRenderer } from 'electron';
 
 const desktopHost = {

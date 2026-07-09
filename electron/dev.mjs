@@ -1,3 +1,12 @@
+/**
+ * 文件：electron/dev.mjs
+ * 职责：开发启动器。并行拉起 Vite 开发服务器与 Electron，等待 Vite 就绪后
+ *       以 ELECTRON_RENDERER_URL 注入启动 Electron；统一处理退出信号，
+ *       关闭时同时终止两个子进程，避免孤儿进程。
+ * 依赖：node:child_process（spawn）、node:process
+ * 导出：无（直接执行）
+ */
+
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 

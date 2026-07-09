@@ -1,3 +1,10 @@
+// 文件：electron/ocr.swift
+// 职责：macOS 离线 OCR 脚本。基于 Apple Vision 框架（VNRecognizeTextRequest）
+//       识别图片文字，支持中/英/日/韩多语言；并尝试按列聚类重建表格为 TSV。
+//       多路回退：CGImageSource → VNImageRequestHandler(url) → NSImage。
+//       由主进程写临时 PNG 后通过 swift/swiftc 调用，输出 {"text":"..."} JSON。
+// 依赖：Vision、AppKit、CoreImage、Foundation
+
 import Foundation
 import Vision
 import AppKit

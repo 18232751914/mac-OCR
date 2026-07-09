@@ -1,3 +1,12 @@
+/**
+ * 文件：electron/main.mjs
+ * 职责：Electron 主进程入口。负责窗口体系（panel / result / settings / overlay /
+ *       long-toolbar / stitcher）、屏幕截图采集、离线 OCR 调度、长截图拼接与
+ *       文本合并、托盘、全局快捷键、开机自启动、权限检测与状态广播（IPC）。
+ * 依赖：electron、node:*、./ocr.swift、./stitcher.html
+ * 导出：无（作为进程入口直接运行）
+ */
+
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -196,6 +205,12 @@ function formatShortcutDisplay(accelerator) {
     .replace(/Shift/g, '⇧');
 }
 
+/**
+ * 构建并 sanitize 当前要广播的宿主状态。
+ * 图片等大体积 data URL 在此被剥离（置 null），仅通过按需接口下发，
+ * 避免每次状态变更向所有窗口推送数 MB base64 造成 IPC/渲染卡顿。
+ * @returns 剔除图片载荷后的宿主状态快照
+ */
 function getShellState() {
   // Sanitize the broadcast: image payloads (often several MB of base64) are
   // stripped here and delivered on-demand via `get-recent-capture-images`.
@@ -859,6 +874,13 @@ function makeThumbnailDataUrl(dataUrl, maxWidth = 160) {
   }
 }
 
+/**
+ * 离线 OCR 识别：写临时 PNG → 调用 Vision（优先用预编译二进制，失败回退 swift）
+ * → 解析 JSON 结果。非 darwin 平台直接抛错；超大图先降采样到 2000px 以内。
+ * 临时文件无论成功失败均在 finally 中清理。
+ * @param imageDataUrl 待识别图片（PNG data URL）
+ * @returns 识别出的文本（空串表示未识别到）
+ */
 async function recognizeTextFromImage(imageDataUrl) {
   if (!imageDataUrl) {
     return '';
@@ -923,6 +945,12 @@ async function recognizeTextFromImage(imageDataUrl) {
   }
 }
 
+/**
+ * 合并多段长截图文本。对相邻两段做最多 8 行的尾部/首部重叠检测，
+ * 重叠一致则去重拼接；无重叠则换行连接。
+ * @param parts 各段文本数组
+ * @returns 去重合并后的完整文本
+ */
 function mergeLongCaptureText(parts) {
   return parts.reduce((mergedText, nextPart) => {
     const nextText = nextPart.trim();
@@ -1049,6 +1077,12 @@ function updateShortcutPreference(mode, accelerator) {
   persistState();
 }
 
+/**
+ * 启动一次截图会话（single 或 long）。校验无进行中会话与屏幕录制权限，
+ * 截取所有显示器并为每个显示器创建 overlay 窗口，最后广播状态。
+ * @param mode 'single' | 'long'
+ * @returns { success } 是否成功发起
+ */
 async function startScreenCapture(mode = 'single') {
   if (hostState.activeCaptureSession || hostState.longCaptureSession) {
     hostState.captureErrorMessage = '当前已有截图会话进行中，请先完成或取消当前会话。';
@@ -1135,6 +1169,13 @@ async function startScreenCapture(mode = 'single') {
   return { success: true };
 }
 
+/**
+ * 按选区从整屏截图（data URL）中裁剪出目标区域，返回裁剪后的 data URL。
+ * 坐标已缩放到实际像素；越界会被钳制到图像范围内。
+ * @param dataUrl 整屏截图（display-local 缩略图）
+ * @param selection 选区（已乘缩放比的实际像素坐标）
+ * @returns 裁剪后的 PNG data URL
+ */
 function cropScreenshot(dataUrl, selection) {
   const image = nativeImage.createFromDataURL(dataUrl);
   const imageSize = image.getSize();
@@ -1148,6 +1189,13 @@ function cropScreenshot(dataUrl, selection) {
   return image.crop(cropRect).toDataURL();
 }
 
+/**
+ * 根据截图框选选区与发送方 overlay 窗口，定位所属显示器并裁剪出选区图像。
+ * 选区坐标为显示器本地坐标；优先按窗口 bounds 精确匹配，失败则按中心点回退。
+ * @param selection overlay 回传的选区（display-local）
+ * @param senderWindow 触发确认的 overlay 窗口
+ * @returns 包含所属 displayId 与裁剪图像的对象；定位失败返回 null
+ */
 function resolveCaptureFromOverlaySelection(selection, senderWindow) {
   // Per-display overlay: selection coords are already display-local.
   // Match by center point — most robust across macOS window manager quirks.
@@ -1233,6 +1281,13 @@ async function finalizeSingleCapture(imageDataUrl) {
   broadcastShellState();
 }
 
+/**
+ * 处理 overlay 提交的框选结果：在关闭 overlay 前定位发送方窗口与选区并裁剪；
+ * long 模式进入长截图会话并启动自动采集，否则走单次识别流程。
+ * @param event IPC 事件（用于定位 sender 窗口）
+ * @param selection 框选选区
+ * @returns { success }
+ */
 async function completeScreenCapture(event, selection) {
   if (!hostState.activeCaptureSession) {
     return { success: false };

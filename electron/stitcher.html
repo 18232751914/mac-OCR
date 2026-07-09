@@ -1,3 +1,10 @@
+<!--
+  文件：electron/stitcher.html
+  职责：长截图拼接的隐藏窗口。暴露 window.__stitchImages(urls) 供主进程经
+        executeJavaScript 调用：在 Canvas 上按重叠高度垂直拼合多张截图；
+       另提供基于像素差的内容变化检测（用于自动采集的终止判断）。
+  依赖：浏览器 Canvas / Image
+-->
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8" /><title>Stitcher</title></head>
