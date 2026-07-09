@@ -1,4 +1,13 @@
 /**
+ * 文件：src/lib/theme.ts
+ * 职责：动态主题引擎。每个预设仅声明一个 hue，其余 OKLCH 调色板由该 hue 推导，
+ *       保证 7 种主色调下的浅色过渡与中性色协调一致。applyTheme 把推导结果
+ *       写入独立 <style> 标签，覆盖 default.css 的静态 :root/.dark 变量。
+ * 依赖：无（纯函数）
+ * 导出：THEME_LIST、DEFAULT_THEME_ID、applyTheme、isThemeId、ThemeId 等
+ */
+
+/**
  * Dynamic theme engine.
  *
  * Each preset only declares a hue; the full OKLCH palette (primary / secondary /
@@ -129,6 +138,11 @@ const STYLE_ID = 'dynamic-theme-vars';
  * Inject (or update) the resolved theme variables into a dedicated <style> tag.
  * Inserting it into <head> after the bundled stylesheet guarantees these rules
  * win over the static `:root` / `.dark` declarations in default.css.
+ */
+/**
+ * 注入（或更新）推导后的主题变量到独立 <style> 标签。
+ * 置于打包样式之后，确保覆盖 default.css 的静态 `:root` / `.dark` 声明。
+ * @param id 主题 ID，缺省为 DEFAULT_THEME_ID（蓝）
  */
 export const applyTheme = (id: ThemeId = DEFAULT_THEME_ID): void => {
   if (typeof document === 'undefined') return;

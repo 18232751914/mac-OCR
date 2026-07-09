@@ -1,4 +1,13 @@
 /**
+ * 文件：src/lib/fireworks.ts
+ * 职责：轻量烟花动效。在屏幕顶层渲染一块 pointer-events:none 的 canvas，
+ *       动画持续 durationMs（默认 1000ms）后自动停止并清理，避免 DOM/CPU 泄漏。
+ *       调用即发即忘，可在按钮 onClick 中直接触发。
+ * 依赖：无（仅依赖浏览器 canvas / rAF）
+ * 导出：triggerFireworks
+ */
+
+/**
  * Lightweight firework burst effect.
  *
  * Renders a full-screen, pointer-events-none canvas overlay and animates a few

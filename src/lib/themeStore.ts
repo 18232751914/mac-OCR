@@ -1,3 +1,11 @@
+/**
+ * 文件：src/lib/themeStore.ts
+ * 职责：基于 Zustand 的主题色状态。持久化到 localStorage；用户主动切换走
+ *       setTheme（会持久化），来自其它窗口同步走 _sync（仅内存更新）。
+ * 依赖：zustand、./theme（DEFAULT_THEME_ID / isThemeId / ThemeId）
+ * 导出：useThemeStore、STORAGE_KEY、isThemeId
+ */
+
 import { create } from 'zustand';
 import { DEFAULT_THEME_ID, isThemeId, type ThemeId } from './theme';
 

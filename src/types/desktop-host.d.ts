@@ -1,3 +1,11 @@
+/**
+ * 文件：src/types/desktop-host.d.ts
+ * 职责：声明 window.desktopHost 的类型契约，作为渲染进程与主进程 IPC 的桥。
+ *       所有方法均经 preload.mjs 的 contextBridge 暴露，返回 Promise。
+ * 依赖：@/lib/desktopHostState（类型）
+ * 导出：DesktopSurface、DesktopHostApi 及全局 Window.desktopHost 声明
+ */
+
 import type { CaptureSelection, HostShellState, OverlaySelection } from '@/lib/desktopHostState';
 
 export type DesktopSurface = 'panel' | 'result' | 'settings' | 'overlay' | 'long-toolbar';

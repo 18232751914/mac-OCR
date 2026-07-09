@@ -1,3 +1,12 @@
+/**
+ * 文件：src/lib/textTransforms.ts
+ * 职责：识别结果的"高级后处理"管线：符号过滤 → 字符替换 → 正则替换/过滤。
+ *       任一配置为空或整体 disabled 时该步为 no-op；无效正则被收集到
+ *       regexErrors 并跳过，不会中断整条管线。
+ * 依赖：@/lib/desktopHostState（AdvancedFeaturesConfig）
+ * 导出：applyTextTransforms、RegexRuleError、ApplyResult
+ */
+
 import type { AdvancedFeaturesConfig } from '@/lib/desktopHostState';
 
 export type RegexRuleError = {
@@ -23,6 +32,9 @@ export type ApplyResult = {
  *      `replace` mode, `text.replace(re, replacement)`; in `filter` mode the
  *      same but with an empty replacement. Invalid rules are reported via
  *      `regexErrors` and skipped — they never abort the whole pipeline.
+ * @param text 待处理的识别文本
+ * @param config 高级功能配置（enabled / filterSymbols / charReplacements / regexRules）
+ * @returns 处理后的文本与收集到的正则错误（regexErrors）
  */
 export function applyTextTransforms(text: string, config: AdvancedFeaturesConfig): ApplyResult {
   if (!config?.enabled) {

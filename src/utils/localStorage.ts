@@ -1,3 +1,11 @@
+/**
+ * 文件：src/utils/localStorage.ts
+ * 职责：localStorage 的智能读写删。写入时对象自动 JSON 序列化、undefined 跳过；
+ *       读取时尝试解析 JSON，失败回退原始字符串；空名删除则清空全部。
+ * 依赖：浏览器 localStorage
+ * 导出：localStorageGet、localStorageSet、localStorageDelete
+ */
+
 type StorageValue = string | number | boolean | object | bigint;
 
 /**

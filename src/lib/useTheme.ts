@@ -1,3 +1,12 @@
+/**
+ * 文件：src/lib/useTheme.ts
+ * 职责：在 React 中挂载动态主题。首次渲染应用已持久化的主题色；主题变化时
+ *       重新应用；并监听 localStorage 的 `storage` 事件，使 Electron 各独立
+ *       BrowserWindow 无需 IPC 即可保持主题同步。
+ * 依赖：react、./themeStore、./theme
+ * 导出：useTheme（无返回值，仅产生副作用）
+ */
+
 import { useEffect } from 'react';
 import { useThemeStore, STORAGE_KEY } from './themeStore';
 import { applyTheme, isThemeId, DEFAULT_THEME_ID, type ThemeId } from './theme';

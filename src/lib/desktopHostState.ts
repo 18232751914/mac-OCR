@@ -1,3 +1,12 @@
+/**
+ * 文件：src/lib/desktopHostState.ts
+ * 职责：定义主进程广播的桌面宿主状态 `HostShellState` 及全部子类型
+ *       （截图会话、长截图会话、快捷键偏好、高级功能配置等），并提供
+ *       `useDesktopHostState` Hook 订阅状态（首屏主动拉取 + 后续增量监听）。
+ * 依赖：react、@/types/desktop-host、window.desktopHost
+ * 导出：全部状态类型 + emptyState + useDesktopHostState
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 
 export type ScreenPermissionState = 'granted' | 'denied' | 'restricted' | 'unknown';
@@ -130,6 +139,12 @@ const emptyState: HostShellState = {
   advancedFeatures: defaultAdvancedFeatures,
 };
 
+/**
+ * 订阅桌面宿主状态。
+ * 首屏主动调用 getShellState 拉取一次；之后若存在 subscribeShellState 则
+ * 通过监听增量更新（多窗口共享同一 auth/主题等）。无宿主时回退到 emptyState。
+ * @returns { state, refresh } —— 当前状态与手动刷新函数
+ */
 export function useDesktopHostState() {
   const [state, setState] = useState<HostShellState>(emptyState);
 

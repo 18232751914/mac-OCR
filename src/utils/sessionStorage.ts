@@ -1,3 +1,10 @@
+/**
+ * 文件：src/utils/sessionStorage.ts
+ * 职责：sessionStorage 的智能读写删（语义与 localStorage 版一致，作用于会话级存储）。
+ * 依赖：浏览器 sessionStorage
+ * 导出：sessionStorageGet、sessionStorageSet、sessionStorageDelete
+ */
+
 type StorageValue = string | number | boolean | object | bigint;
 
 /**
