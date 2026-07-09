@@ -18,7 +18,7 @@ type SelectionRect = {
 };
 
 type Props = {
-  mode: 'single' | 'long';
+  mode: 'single' | 'long' | 'quick';
   onCancel: () => void;
   onConfirm: (selection: SelectionRect) => void;
 };
@@ -113,12 +113,14 @@ const DesktopCaptureOverlay = ({ mode, onCancel, onConfirm }: Props) => {
       <div className="absolute left-4 top-4 z-20 flex items-start gap-3.5 rounded-2xl bg-black/62 px-4 py-3.5 text-sm shadow-2xl backdrop-blur-xl ring-1 ring-white/10">
         <div className="space-y-1">
           <div className="text-[13px] font-semibold tracking-tight">
-            {mode === 'long' ? '拖拽框选长截图采集区域' : '拖拽框选要识别的区域'}
+            {mode === 'quick' ? '拖拽框选要复制的区域' : mode === 'long' ? '拖拽框选长截图采集区域' : '拖拽框选要识别的区域'}
           </div>
           <div className="text-[12px] text-white/55">
-            {mode === 'long'
-              ? '框选后滚动目标内容，应用将自动拼接长图并识别'
-              : '松开鼠标后将自动继续'}
+            {mode === 'quick'
+              ? '松开鼠标后将自动复制到剪贴板'
+              : mode === 'long'
+                ? '框选后滚动目标内容，应用将自动拼接长图并识别'
+                : '松开鼠标后将自动继续'}
           </div>
         </div>
         <Button

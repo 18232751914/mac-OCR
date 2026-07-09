@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Camera,
   Check,
   ChevronDown,
   ChevronRight,
@@ -97,12 +98,11 @@ type AdvancedFeaturesPanelProps = {
 };
 
 /**
- * Inline advanced-features panel rendered directly inside the result page
- * (no dialog / no navigation). The "高级功能" toggle button in the result
- * window controls visibility; this component only renders the expanded body.
+ * 高级功能面板：直接内联在结果页内（非弹窗 / 非路由跳转）。
+ * 结果页中的「高级功能」开关控制其显隐，本组件仅渲染展开后的主体内容。
  *
- * Changes are auto-saved by the parent (no 保存 / 取消 buttons), and any
- * modification to a configuration value also auto-disables the feature.
+ * 所有改动由父组件自动保存（无「保存 / 取消」按钮），且任一配置项被修改时
+ * 也会自动停用该功能。
  */
 function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanelProps) {
   const [symbolInput, setSymbolInput] = useState('');
@@ -122,14 +122,13 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
     return map;
   }, [config.regexRules]);
 
-  // Any change to a configuration value auto-disables the feature (linkage
-  // requirement) and is auto-saved by the parent via onConfigChange.
+  // 任一配置项被修改都会自动停用该功能（联动要求），并经由 onConfigChange
+  // 由父组件自动保存。
   const update = (next: AdvancedFeaturesConfig) => {
     onConfigChange({ ...next, enabled: false });
   };
 
-  // The enable/disable switch is the user's explicit state toggle; it must not
-  // be overridden by the auto-disable linkage above.
+  // 启用/停用开关是用户主动的状态切换，不能被上面的自动停用联动逻辑覆盖。
   const toggleEnabled = (checked: boolean) => {
     onConfigChange({ ...config, enabled: checked });
     if (checked) triggerFireworks();
@@ -177,7 +176,7 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
 
   return (
     <div className="overflow-hidden rounded-2xl border border-glass-border bg-glass-bg backdrop-blur-xl">
-      {/* Header: enable switch */}
+      {/* 头部：启用开关 */}
       <div className="flex items-center justify-between gap-2 border-b border-border/20 px-3.5 py-2.5">
         <span className="text-[12px] font-semibold tracking-tight text-foreground/85">高级功能</span>
         <label className="flex shrink-0 cursor-pointer select-none items-center gap-1.5">
@@ -192,7 +191,7 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
         </label>
       </div>
 
-      {/* Body: expands inline; height grows automatically with content */}
+      {/* 主体：内联展开，高度随内容自动增长 */}
       <div className="space-y-4 px-3.5 py-3">
         {/* 1. Filter symbols */}
         <section className="space-y-2">
@@ -381,7 +380,7 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
         </section>
       </div>
 
-      {/* Footer: no 保存 / 取消 buttons — changes auto-save and auto-disable */}
+      {/* 底部：无「保存 / 取消」按钮，改动自动保存并自动停用 */}
       <div className="flex items-center border-t border-border/20 px-3.5 py-2.5">
         <span className="text-[11px] leading-snug text-muted-foreground/55">
           修改配置后会自动保存，并自动停用该功能
@@ -465,13 +464,14 @@ const DesktopShellView = () => {
   const [singleShortcutInput, setSingleShortcutInput] = useState('');
   const [longShortcutInput, setLongShortcutInput] = useState('');
   const [menuShortcutInput, setMenuShortcutInput] = useState('');
+  const [quickShortcutInput, setQuickShortcutInput] = useState('');
   const [shortcutSaved, setShortcutSaved] = useState(false);
   const [resultSaved, setResultSaved] = useState(false);
   const [longImageAction, setLongImageAction] = useState<'idle' | 'saved' | 'copied' | 'error'>('idle');
   const [autoLaunchError, setAutoLaunchError] = useState('');
 
-  // Full-resolution capture images are delivered on-demand (not via the shell
-  // state broadcast, which would push multi-MB base64 to every window).
+  // 全分辨率截图图片按需拉取（不通过 shell 状态广播，否则会把数 MB 的
+  // base64 推送给每个窗口，造成性能问题）。
   const [captureImages, setCaptureImages] = useState<{
     imageDataUrl: string | null;
     longImageDataUrl: string | null;
@@ -480,10 +480,8 @@ const DesktopShellView = () => {
   const advancedFeatures = state.advancedFeatures;
   const rawText = state.recentCaptureResult?.text ?? '';
 
-  // While the advanced-features dialog is open we edit a draft so the result
-  // text can be previewed live (and reverted on 取消). When collapsed, the
-  // persisted config drives the result. The panel expands inline within this
-  // page — no dialog or navigation.
+  // 高级功能展开时编辑草稿，以便实时预览结果文本（取消可还原）；收起时
+  // 以持久化配置驱动结果。面板在本页内联展开，不使用弹窗或路由跳转。
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFeaturesConfig>(advancedFeatures);
 
@@ -493,8 +491,8 @@ const DesktopShellView = () => {
     [rawText, effectiveConfig],
   );
 
-  // Auto-save: every advanced-features change is persisted immediately (no
-  // explicit 保存 button). The panel also auto-disables the feature on change.
+  // 自动保存：高级功能的每次改动都会立即持久化（无显式「保存」按钮）。
+  // 改动时面板也会自动停用该功能。
   const handleAdvancedChange = async (next: AdvancedFeaturesConfig) => {
     setAdvancedDraft(next);
     await window.desktopHost?.saveAdvancedFeatures({ config: next });
@@ -545,10 +543,12 @@ const DesktopShellView = () => {
     setSingleShortcutInput(state.shortcutPreferences.single.accelerator);
     setLongShortcutInput(state.shortcutPreferences.long.accelerator);
     setMenuShortcutInput(state.shortcutPreferences.menu.accelerator);
+    setQuickShortcutInput(state.shortcutPreferences.quick.accelerator);
   }, [
     state.shortcutPreferences.single.accelerator,
     state.shortcutPreferences.long.accelerator,
     state.shortcutPreferences.menu.accelerator,
+    state.shortcutPreferences.quick.accelerator,
   ]);
 
   const saveShortcuts = async () => {
@@ -565,21 +565,24 @@ const DesktopShellView = () => {
       mode: 'menu',
       accelerator: menuShortcutInput,
     });
+    const quickResult = await window.desktopHost?.saveShortcutPreference({
+      mode: 'quick',
+      accelerator: quickShortcutInput,
+    });
     setShortcutSaved(
-      Boolean(singleResult?.success && longResult?.success && menuResult?.success),
+      Boolean(singleResult?.success && longResult?.success && menuResult?.success && quickResult?.success),
     );
     await refresh();
   };
 
-  // Adaptive height for the settings window: measure the card's natural height
-  // and ask the host to resize the window so every section is visible without
-  // truncation. Re-fits whenever the surface mounts or the content grows.
+  // 设置窗口自适应高度：测量卡片自然高度，并请求宿主调整窗口尺寸，使
+  // 各分区完整可见不被截断。surface 挂载或内容增长时都会重新适配。
   useEffect(() => {
     const el = settingsCardRef.current;
     const fitApi = window.desktopHost?.requestWindowFit;
     if (surface !== 'settings' || !el || !fitApi) return;
     const fit = () => {
-      const height = el.offsetHeight + 32; // <main> p-4 vertical padding
+      const height = el.offsetHeight + 32; // <main> 的 p-4 上下内边距
       void fitApi(height);
     };
     fit();
@@ -588,9 +591,8 @@ const DesktopShellView = () => {
     return () => observer.disconnect();
   }, [surface]);
 
-  // Adaptive height for the main-menu (panel) window: size the window to the
-  // header + content so it never overflows or truncates regardless of how many
-  // sections are visible (permission hint, long-capture status, recent result…).
+  // 主菜单（panel）窗口自适应高度：将窗口尺寸设为「头部 + 内容」，无论显示
+  // 多少分区（权限提示、长截图状态、最近结果等）都不会溢出或被截断。
   useEffect(() => {
     const el = panelContentRef.current;
     const header = panelHeaderRef.current;
@@ -636,6 +638,15 @@ const DesktopShellView = () => {
     await refresh();
   }
 
+  async function startQuickCapture() {
+    if (!window.desktopHost) {
+      return;
+    }
+
+    await window.desktopHost.startQuickScreenCapture();
+    await refresh();
+  }
+
   async function handleSaveLongImage() {
     const res = await window.desktopHost?.saveLongImage();
     if (res?.success) {
@@ -656,13 +667,13 @@ const DesktopShellView = () => {
       text: captureImages.longImageDataUrl,
     });
     setLongImageAction('copied');
-    // Brief feedback, then close the result window
+    // 短暂反馈后关闭结果窗口
     setTimeout(() => {
       void window.desktopHost?.closeCurrentWindow();
     }, 900);
   }
 
-  // ── Overlay surface ──
+  // ── 框选覆盖层 surface ──
   if (surface === 'overlay' && state.activeCaptureSession) {
     return (
       <DesktopCaptureOverlay
@@ -673,7 +684,7 @@ const DesktopShellView = () => {
     );
   }
 
-  // ── Long screenshot toolbar ──
+  // ── 长截图控制条 surface ──
   if (surface === 'long-toolbar' && state.longCaptureSession) {
     const seg = state.longCaptureSession.segmentsCaptured;
     const mode = state.longCaptureSession.mode ?? 'auto';
@@ -685,7 +696,7 @@ const DesktopShellView = () => {
     return (
       <main className="flex h-screen items-center justify-center bg-transparent text-foreground">
         <div className="w-full max-w-[460px] rounded-2xl border border-glass-border bg-glass-bg px-4 py-3.5 shadow-xl backdrop-blur-xl">
-          {/* Mode switcher + status */}
+          {/* 模式切换 + 状态 */}
           <div className="mb-3 flex items-center gap-3">
             <div className="flex rounded-lg border border-border/40 bg-muted/40 p-0.5">
               <button
@@ -728,7 +739,7 @@ const DesktopShellView = () => {
             </div>
           </div>
 
-          {/* Progress + preview row */}
+          {/* 进度 + 预览行 */}
           <div className="mb-3 flex items-center gap-3">
             <div className="flex flex-1 items-center gap-1.5">
               {Array.from({ length: maxDots }, (_, i) => (
@@ -742,7 +753,7 @@ const DesktopShellView = () => {
                 />
               ))}
             </div>
-            {/* Preview thumbnail */}
+            {/* 预览缩略图 */}
             {preview ? (
               <div className="h-9 w-14 shrink-0 overflow-hidden rounded-lg border border-border/30 bg-muted/30 shadow-sm">
                 <img
@@ -757,14 +768,14 @@ const DesktopShellView = () => {
             </span>
           </div>
 
-          {/* Hint */}
+          {/* 提示 */}
           <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/55">
             {mode === 'auto'
               ? '滚动目标内容后应用将自动采集，暂停采集后可随时完成'
               : '滚动内容后点击「继续采集」追加分段'}
           </p>
 
-          {/* Actions */}
+          {/* 操作按钮 */}
           <div className="flex items-center gap-2">
             {mode === 'auto' ? (
               <>
@@ -822,7 +833,7 @@ const DesktopShellView = () => {
     );
   }
 
-  // ── Result surface ──
+  // ── 结果窗口 surface ──
   if (surface === 'result') {
     const hasContent = editableText.trim().length > 0;
     const capturedTime = state.recentCaptureResult?.capturedAt
@@ -836,10 +847,10 @@ const DesktopShellView = () => {
 
     return (
       <main className="relative flex h-screen flex-col overflow-hidden bg-transparent text-foreground">
-        {/* Top accent gradient */}
+        {/* 顶部高亮渐变 */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-primary/40 via-primary to-primary/40" />
 
-        {/* Header */}
+        {/* 头部 */}
         <header className="drag-region flex shrink-0 items-center justify-between pl-4 pr-3 pt-4 pb-3">
           <div className="flex items-center gap-3 no-drag">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/25">
@@ -867,7 +878,7 @@ const DesktopShellView = () => {
           </Button>
         </header>
 
-        {/* Long image preview (shown for long capture results) */}
+        {/* 长图预览（长截图结果时显示） */}
         {captureImages.longImageDataUrl && (
           <div className="shrink-0 px-4 pb-2">
             <div className="overflow-hidden rounded-2xl border border-border/30 bg-muted/10">
@@ -879,10 +890,10 @@ const DesktopShellView = () => {
                   onClick={() => void handleSaveLongImage()}
                   title="点击保存长图"
                 />
-                {/* Gradient fade at bottom */}
+                {/* 底部渐变遮罩 */}
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-glass-bg to-transparent" />
               </div>
-              {/* Image action buttons + feedback */}
+              {/* 图片操作按钮 + 反馈 */}
               <div className="flex items-center gap-2 border-t border-border/20 px-3 py-2">
                 <Button
                   variant="ghost"
@@ -920,7 +931,7 @@ const DesktopShellView = () => {
           </div>
         )}
 
-        {/* Textarea */}
+        {/* 文本编辑区 */}
         <div className="flex-1 px-4 pb-1">
           <div className="relative h-full overflow-hidden rounded-2xl border border-border/30 bg-glass-bg shadow-inner backdrop-blur-xl transition-all duration-200 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 focus-within:bg-glass-bg">
             {state.recentCaptureResult?.loading ? (
@@ -955,7 +966,7 @@ const DesktopShellView = () => {
           </div>
         </div>
 
-        {/* Advanced features: inline expand within the result page (no dialog / no navigation) */}
+        {/* 高级功能：在结果页内联展开（非弹窗 / 非路由跳转） */}
         <div className="shrink-0 px-4 pb-2">
           <Button
             variant={advancedExpanded ? 'secondary' : 'outline'}
@@ -992,11 +1003,11 @@ const DesktopShellView = () => {
           )}
         </div>
 
-        {/* Footer actions */}
+        {/* 底部操作区 */}
         <footer className="shrink-0 px-4 pt-2 pb-4">
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-glass-border bg-glass-bg px-3.5 py-3 backdrop-blur-xl shadow-sm">
             <div className="flex items-center gap-3 min-w-0">
-              {/* Remove newlines toggle */}
+              {/* 去除换行符开关 */}
               <label className="flex shrink-0 cursor-pointer select-none items-center gap-1.5">
                 <Switch
                   size="sm"
@@ -1062,7 +1073,7 @@ const DesktopShellView = () => {
     );
   }
 
-  // ── Settings surface ──
+  // ── 设置窗口 surface ──
   if (surface === 'settings') {
     return (
       <main className="overflow-y-auto bg-transparent p-4 text-foreground">
@@ -1097,9 +1108,9 @@ const DesktopShellView = () => {
           </CardHeader>
 
           <CardContent className="space-y-5 text-sm">
-            {/* Single screenshot shortcut */}
+            {/* 截图识别快捷键 */}
             <div className="space-y-2.5">
-              <label className="text-[13px] font-semibold text-foreground">普通截图快捷键</label>
+              <label className="text-[13px] font-semibold text-foreground">截图识别快捷键</label>
               <p className="text-[12px] text-muted-foreground/70">
                 当前已生效：{state.shortcutPreferences.single.displayText}
               </p>
@@ -1122,9 +1133,9 @@ const DesktopShellView = () => {
               </p>
             </div>
 
-            {/* Long screenshot shortcut */}
+            {/* 长截图识别快捷键 */}
             <div className="space-y-2.5">
-              <label className="text-[13px] font-semibold text-foreground">长截图快捷键</label>
+              <label className="text-[13px] font-semibold text-foreground">长截图识别快捷键</label>
               <p className="text-[12px] text-muted-foreground/70">
                 当前已生效：{state.shortcutPreferences.long.displayText}
               </p>
@@ -1147,7 +1158,7 @@ const DesktopShellView = () => {
               </p>
             </div>
 
-            {/* Menu (toggle panel) shortcut */}
+            {/* 唤起菜单快捷键 */}
             <div className="space-y-2.5">
               <label className="text-[13px] font-semibold text-foreground">唤起菜单快捷键</label>
               <p className="text-[12px] text-muted-foreground/70">
@@ -1172,7 +1183,32 @@ const DesktopShellView = () => {
               </p>
             </div>
 
-            {/* Dynamic theme color */}
+            {/* 截图（复制到剪贴板）快捷键 */}
+            <div className="space-y-2.5">
+              <label className="text-[13px] font-semibold text-foreground">截图（复制到剪贴板）快捷键</label>
+              <p className="text-[12px] text-muted-foreground/70">
+                当前已生效：{state.shortcutPreferences.quick.displayText}
+              </p>
+              <Input
+                readOnly
+                value={quickShortcutInput}
+                onFocus={() => setShortcutSaved(false)}
+                onKeyDown={(event) => {
+                  event.preventDefault();
+                  const accelerator = toAccelerator(event);
+                  if (!accelerator) return;
+                  setQuickShortcutInput(accelerator);
+                  setShortcutSaved(false);
+                }}
+                placeholder="聚焦后直接按下组合键"
+                className="rounded-xl border-border/40 bg-muted/30 font-mono text-[13px] placeholder:text-muted-foreground/30"
+              />
+              <p className="text-[11px] leading-5 text-muted-foreground/50">
+                按下该组合键直接启动截图框选，完成后将图像复制到系统剪贴板。
+              </p>
+            </div>
+
+            {/* 动态主题色 */}
             <div className="space-y-2.5">
               <label className="text-[13px] font-semibold text-foreground">主题色</label>
               <p className="text-[12px] text-muted-foreground/70">
@@ -1205,7 +1241,7 @@ const DesktopShellView = () => {
               </div>
             </div>
 
-            {/* Auto-launch on startup */}
+            {/* 开机自启动 */}
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-glass-border bg-glass-bg px-3.5 py-3">
               <div className="min-w-0 space-y-0.5">
                 <label className="text-[13px] font-semibold text-foreground">
@@ -1235,14 +1271,14 @@ const DesktopShellView = () => {
               </div>
             )}
 
-            {/* Error message */}
+            {/* 错误提示 */}
             {state.shortcutRegistrationError && (
               <div className="rounded-2xl border border-destructive/15 bg-destructive/5 px-3.5 py-3 text-[13px] leading-relaxed text-destructive">
                 {state.shortcutRegistrationError}
               </div>
             )}
 
-            {/* Success message */}
+            {/* 成功提示 */}
             {shortcutSaved && (
               <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/60 px-3.5 py-3 text-[13px] leading-relaxed text-emerald-700">
                 快捷键已保存并重新注册。
@@ -1256,10 +1292,10 @@ const DesktopShellView = () => {
     );
   }
 
-  // ── Panel surface (main menu) ──
+  // ── 面板 surface（主菜单） ──
   return (
     <main className="bg-transparent text-foreground select-none">
-      {/* Header — draggable, padded for macOS traffic lights */}
+      {/* 头部 — 可拖拽，并为 macOS 红绿灯按钮预留内边距 */}
       <header
         ref={panelHeaderRef}
         className="drag-region shrink-0 border-b border-border/20 pl-4 pr-3 py-3.5"
@@ -1290,13 +1326,13 @@ const DesktopShellView = () => {
         </div>
       </header>
 
-      {/* Content area — sizes to its content; scrolls only when the window is
-          clamped to the visible area so nothing is ever truncated. */}
+      {/* 内容区 — 尺寸随内容自适应；仅当窗口被限制到可视区域时才滚动，
+          确保内容永远不会被截断。 */}
       <div
         ref={panelContentRef}
         className="max-h-[calc(100vh-96px)] space-y-4 overflow-y-auto px-4 py-4"
       >
-        {/* Permission warning */}
+        {/* 权限警告 */}
         {permissionHint ? (
           <div className="flex items-start gap-2.5 rounded-2xl border border-amber-200/60 bg-amber-50/60 px-3.5 py-3 text-[12px] leading-relaxed text-amber-800 backdrop-blur-sm">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -1324,7 +1360,7 @@ const DesktopShellView = () => {
           </div>
         ) : null}
 
-        {/* Long capture in-progress indicator */}
+        {/* 长截图进行中指示 */}
         {state.longCaptureSession ? (
           <div className="flex items-center gap-3 rounded-2xl border border-sky-200/60 bg-sky-50/60 px-3.5 py-3 backdrop-blur-sm">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-sky-200/70 text-[11px] font-bold text-sky-700">
@@ -1337,6 +1373,24 @@ const DesktopShellView = () => {
             </span>
           </div>
         ) : null}
+
+        {/* 主要操作：快速截图（复制到剪贴板） */}
+        <button
+          type="button"
+          disabled={!isDesktopHost || Boolean(state.longCaptureSession)}
+          onClick={() => void startQuickCapture()}
+          className="group relative flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-glass-border bg-glass-bg px-4 py-5 text-left shadow-sm backdrop-blur-xl transition-all duration-200 hover:border-primary/30 hover:bg-glass-bg hover:shadow-md disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-colors duration-200 group-hover:bg-primary/20">
+            <Camera className="h-5 w-5 text-primary/75 transition-colors duration-200 group-hover:text-primary" />
+          </div>
+          <div className="flex-1">
+            <div className="text-[14px] font-bold tracking-tight">截图</div>
+            <div className="mt-0.5 text-[10px] leading-none text-muted-foreground/55">
+              框选区域后自动复制到剪贴板 · {state.shortcutPreferences.quick.displayText}
+            </div>
+          </div>
+        </button>
 
         {/* Primary action cards */}
         <div className="grid grid-cols-2 gap-3">
@@ -1375,7 +1429,7 @@ const DesktopShellView = () => {
           </button>
         </div>
 
-        {/* Secondary navigation links */}
+        {/* 次要导航链接 */}
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="ghost"
@@ -1401,7 +1455,7 @@ const DesktopShellView = () => {
           </Button>
         </div>
 
-        {/* Recent result preview */}
+        {/* 最近识别结果预览 */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-0.5">
             <span className="text-[11px] font-semibold text-muted-foreground/60">

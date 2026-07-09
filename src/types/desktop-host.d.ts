@@ -18,6 +18,7 @@ export interface DesktopHostApi {
   togglePanelWindow: () => Promise<{ success: boolean }>;
   startScreenCapture: () => Promise<{ success: boolean }>;
   startLongScreenCapture: () => Promise<{ success: boolean }>;
+  startQuickScreenCapture: () => Promise<{ success: boolean }>;
   activateOverlay: () => Promise<{ success: boolean }>;
   completeScreenCapture: (selection: OverlaySelection) => Promise<{ success: boolean }>;
   cancelCaptureSession: () => Promise<{ success: boolean }>;
@@ -29,7 +30,7 @@ export interface DesktopHostApi {
   saveRecentResultText: (request: { text: string }) => Promise<{ success: boolean }>;
   copyResultText: (request: { text: string }) => Promise<{ success: boolean }>;
   getRecentCaptureImages: () => Promise<{ imageDataUrl: string | null; longImageDataUrl: string | null }>;
-  saveShortcutPreference: (request: { mode: 'single' | 'long' | 'menu'; accelerator: string }) => Promise<{ success: boolean }>;
+  saveShortcutPreference: (request: { mode: 'single' | 'long' | 'menu' | 'quick'; accelerator: string }) => Promise<{ success: boolean }>;
   saveAdvancedFeatures: (request: { config: import('@/lib/desktopHostState').AdvancedFeaturesConfig }) => Promise<{ success: boolean }>;
   openScreenCapturePreferences: () => Promise<{ success: boolean }>;
   setAutoLaunch: (request: { enabled: boolean }) => Promise<{ success: boolean; error?: string }>;

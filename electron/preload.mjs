@@ -32,6 +32,9 @@ const desktopHost = {
   startLongScreenCapture() {
     return ipcRenderer.invoke('desktop-host:start-long-screen-capture');
   },
+  startQuickScreenCapture() {
+    return ipcRenderer.invoke('desktop-host:start-quick-screen-capture');
+  },
   activateOverlay() {
     return ipcRenderer.invoke('desktop-host:activate-overlay');
   },

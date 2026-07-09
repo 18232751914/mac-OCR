@@ -21,7 +21,7 @@ export type HostCaptureResult = {
 };
 
 export type HostCaptureSession = {
-  mode: 'single' | 'long';
+  mode: 'single' | 'long' | 'quick';
   overlayBounds: {
     x: number;
     y: number;
@@ -66,6 +66,7 @@ export type ShortcutPreferences = {
   single: CaptureShortcutPreference;
   long: CaptureShortcutPreference;
   menu: CaptureShortcutPreference;
+  quick: CaptureShortcutPreference;
 };
 
 export type CharReplacement = {
@@ -132,6 +133,10 @@ const emptyState: HostShellState = {
     menu: {
       accelerator: 'CommandOrControl+Shift+M',
       displayText: '⌘/Ctrl + ⇧ + M',
+    },
+    quick: {
+      accelerator: 'CommandOrControl+Shift+3',
+      displayText: '⌘/Ctrl + ⇧ + 3',
     },
   },
   shortcutRegistrationError: null,

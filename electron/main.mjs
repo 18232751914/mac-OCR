@@ -40,6 +40,7 @@ const ocrScriptPath = path.join(__dirname, 'ocr.swift');
 const defaultSingleShortcut = 'CommandOrControl+Shift+1';
 const defaultLongShortcut = 'CommandOrControl+Shift+2';
 const defaultMenuShortcut = 'CommandOrControl+Shift+M';
+const defaultQuickShortcut = 'CommandOrControl+Shift+3';
 
 let tray = null;
 let panelWindow = null;
@@ -76,6 +77,10 @@ const hostState = {
     menu: {
       accelerator: defaultMenuShortcut,
       displayText: '⌘/Ctrl + ⇧ + M',
+    },
+    quick: {
+      accelerator: defaultQuickShortcut,
+      displayText: '⌘/Ctrl + ⇧ + 3',
     },
   },
   shortcutRegistrationError: null,
@@ -114,6 +119,7 @@ function loadPersistedState() {
         single: persistedState.shortcutPreferences.single,
         long: persistedState.shortcutPreferences.long,
         menu: persistedState.shortcutPreferences.menu ?? hostState.shortcutPreferences.menu,
+        quick: persistedState.shortcutPreferences.quick ?? hostState.shortcutPreferences.quick,
       };
     } else if (persistedState.shortcutPreference?.accelerator && persistedState.shortcutPreference?.displayText) {
       hostState.shortcutPreferences.single = persistedState.shortcutPreference;
@@ -986,6 +992,7 @@ function buildTrayContextMenu() {
         : '显示面板',
       click: togglePanelWindow,
     },
+    { label: '截图', click: () => void startScreenCapture('quick') },
     { label: '截图识别', click: () => void startScreenCapture('single') },
     { label: '长截图识别', click: () => void startScreenCapture('long') },
     { label: '结果窗口', click: showResultWindow },
@@ -1018,11 +1025,11 @@ function registerScreenshotShortcut() {
   hostState.shortcutRegistrationError = null;
 
   const prefs = hostState.shortcutPreferences;
-  const accelerators = [prefs.single.accelerator, prefs.long.accelerator, prefs.menu.accelerator];
+  const accelerators = [prefs.single.accelerator, prefs.long.accelerator, prefs.menu.accelerator, prefs.quick.accelerator];
 
   // 1) Intra-app duplicate detection: no two shortcuts may collide.
   if (new Set(accelerators).size < accelerators.length) {
-    hostState.shortcutRegistrationError = '普通截图、长截图与唤起菜单不能使用相同的快捷键，请修改后重试。';
+    hostState.shortcutRegistrationError = '普通截图、长截图、唤出菜单与截图（复制到剪贴板）不能使用相同的快捷键，请修改后重试。';
     globalShortcut.unregisterAll();
     return false;
   }
@@ -1033,6 +1040,7 @@ function registerScreenshotShortcut() {
     const registrations = [
       ['single', () => void startScreenCapture('single')],
       ['long', () => void startScreenCapture('long')],
+      ['quick', () => void startScreenCapture('quick')],
       ['menu', () => void togglePanelWindow()],
     ].map(([key, handler]) => globalShortcut.register(prefs[key].accelerator, handler));
 
@@ -1060,9 +1068,9 @@ function updateShortcutPreference(mode, accelerator) {
 }
 
 /**
- * 启动一次截图会话（single 或 long）。校验无进行中会话与屏幕录制权限，
+ * 启动一次截图会话（single / long / quick）。校验无进行中会话与屏幕录制权限，
  * 截取所有显示器并为每个显示器创建 overlay 窗口，最后广播状态。
- * @param mode 'single' | 'long'
+ * @param mode 'single' | 'long' | 'quick'
  * @returns { success } 是否成功发起
  */
 async function startScreenCapture(mode = 'single') {
@@ -1303,6 +1311,16 @@ async function completeScreenCapture(event, selection) {
 
   const imageDataUrl = resolvedCapture.imageDataUrl;
 
+  if (session.mode === 'quick') {
+    // Copy cropped image to system clipboard and end — no OCR.
+    const image = nativeImage.createFromDataURL(imageDataUrl);
+    clipboard.writeImage(image);
+    hostState.captureDisplays = [];
+    hostState.captureErrorMessage = null;
+    broadcastShellState();
+    return { success: true };
+  }
+
   if (session.mode === 'long') {
     // Use the SAME capture path as subsequent segments so the first segment
     // has identical resolution/coordinates (avoids stitch misalignment).
@@ -1523,7 +1541,7 @@ function closeCurrentWindow(event) {
 function saveShortcutPreference(_, request) {
   const mode = request?.mode;
   const accelerator = request?.accelerator?.trim();
-  if ((mode !== 'single' && mode !== 'long' && mode !== 'menu') || !accelerator) {
+  if ((mode !== 'single' && mode !== 'long' && mode !== 'menu' && mode !== 'quick') || !accelerator) {
     hostState.shortcutRegistrationError = '请输入可注册的快捷键格式，例如 CommandOrControl+Shift+1。';
     broadcastShellState();
     return { success: false };
@@ -1533,6 +1551,7 @@ function saveShortcutPreference(_, request) {
     single: { ...hostState.shortcutPreferences.single },
     long: { ...hostState.shortcutPreferences.long },
     menu: { ...hostState.shortcutPreferences.menu },
+    quick: { ...hostState.shortcutPreferences.quick },
   };
   updateShortcutPreference(mode, accelerator);
   const registered = registerScreenshotShortcut();
@@ -1721,6 +1740,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('desktop-host:start-screen-capture', () => startScreenCapture('single'));
   ipcMain.handle('desktop-host:start-long-screen-capture', () => startScreenCapture('long'));
+  ipcMain.handle('desktop-host:start-quick-screen-capture', () => startScreenCapture('quick'));
 
   // Keep the screenshot cursor consistent across every physical display.
   // On macOS, win.setCursor() only sticks for the *key* window. When the pointer
