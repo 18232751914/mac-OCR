@@ -11,11 +11,6 @@ export interface ChangePasswordRequestDto {
   NewPassword: string;
 }
 
-export interface CreateUserRequest {
-  Name: string;
-  Email: string;
-}
-
 export interface GetSessionRequestDto {
 }
 
@@ -81,13 +76,6 @@ export interface SignUpResponseDto {
   IsSuccess: boolean;
   ErrorMessage: string | null;
   RequiresFollowUp: boolean;
-  AccessToken: string | null;
-  RefreshToken: string | null;
-  Session: SessionDto | null;
-}
-
-export interface StreamingAuthMetaEventDto {
-  Type: string;
   AccessToken: string | null;
   RefreshToken: string | null;
   Session: SessionDto | null;

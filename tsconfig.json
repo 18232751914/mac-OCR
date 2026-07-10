@@ -5,14 +5,14 @@
     "target": "ES2020",
     "strict": true,
     "noEmit": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "jsx": "react-jsx",
 
     "allowSyntheticDefaultImports": true,
     "module": "ES2020",
     "skipLibCheck": true,
 
-    /* for Jest */
+    /* for Vitest */
     "esModuleInterop": true,
 
     /* Bundler mode */

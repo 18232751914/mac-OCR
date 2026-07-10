@@ -7,8 +7,8 @@
 ```
 react-app/
 ├── README.md                  # 用户文档（总览 / 功能 / 架构 / 流程 / 配置 / 脚本 / 打包）
-├── DEV_DOCS.md                # 详细开发文档（进程 / 窗口 / IPC / OCR / 前端业务层）
-├── docs/                      # 拆分出的结构化子文档（项目结构 / 模块依赖）
+├── docs/                      # 结构化子文档（项目结构 / 模块依赖 / 配置 / 流程）
+│   └── DEV_DOCS.md            # 详细开发文档（进程 / 窗口 / IPC / OCR / 前端业务层）
 ├── build.sh                   # 一键打包脚本（环境检查 → 编译 OCR → 构建 → .app → .dmg）
 ├── index.html                 # HTML 入口（运行时按 VITE_APP_NAME 覆盖 <title>）
 ├── vite.config.ts             # Vite + 测试 + 动态 manifest 配置
@@ -29,8 +29,7 @@ react-app/
     ├── api/                   # 远端业务服务调用层
     │   ├── ApiClient.ts       # 通用 invoke / stream 封装（注入并刷新 token）
     │   ├── AppDtos.ts         # 请求 / 响应 DTO 类型定义
-    │   ├── AuthManager.ts     # 鉴权业务方法（Login / SignUp / GetSession …）
-    │   └── Enums.ts           # 示例枚举（SampleEnum）
+    │   └── AuthManager.ts     # 鉴权业务方法（Login / SignUp / GetSession …）
     ├── auth/
     │   └── AuthStore.ts       # Zustand：登录态 + token / session 持久化
     ├── lib/                   # 通用库（桌面宿主 / 状态 / 主题 / 工具）
@@ -45,22 +44,14 @@ react-app/
     ├── components/            # 可复用组件
     │   ├── DesktopCaptureOverlay.tsx # 截图框选覆盖层（拖拽 / 光标 / ESC）
     │   ├── ErrorBoundary.tsx  # React 错误边界
-    │   ├── utils.ts           # 自定义 SVG 图标 Props 类型
     │   └── ui/                # shadcn/ui 组件（19 个，见下表）
     ├── routes/
-    │   ├── Routes.tsx         # 路由表（index / /unauthorized / *）
-    │   └── ProtectedRoute.tsx # 鉴权守卫（会话恢复 + 角色校验）
-    ├── utils/                 # 小工具
-    │   ├── debounce.ts        # 防抖
-    │   ├── localStorage.ts    # localStorage 智能读写删
-    │   ├── sessionStorage.ts  # sessionStorage 智能读写删
-    │   └── roles.ts           # 角色常量（admin / user）
+    │   └── Routes.tsx         # 路由表（index / /unauthorized / *）
     ├── types/
     │   ├── desktop-host.d.ts  # window.desktopHost API 类型声明
     │   └── json.d.ts          # JSON 模块声明
     └── views/                 # 页面视图
         ├── DesktopShellView.tsx # 多 surface 主视图（核心）
-        ├── ExampleView.tsx    # 根路由占位页（临时）
         ├── NotFoundView.tsx   # 404
         └── UnauthorizedView.tsx # 无权限
 ```
@@ -81,11 +72,11 @@ react-app/
 
 | 目录 | 职责 |
 |------|------|
-| `api/` | `ApiClient`（invoke / stream 封装、token 注入刷新）、`AuthManager`、`AppDtos`、`Enums` |
+| `api/` | `ApiClient`（invoke / stream 封装、token 注入刷新）、`AuthManager`、`AppDtos` |
 | `auth/` | `AuthStore`（Zustand）管理登录态与 token / session 持久化 |
 | `lib/` | `desktopHost`（环境检测）、`desktopHostState`（状态订阅）、`textTransforms`（高级后处理）、`theme*`、`useTheme`、`fireworks`、`utils` |
 | `components/` | `DesktopCaptureOverlay`（框选覆盖层）、`ErrorBoundary` 及 `ui/`（shadcn/ui） |
-| `routes/` | `Routes`（路由表）、`ProtectedRoute`（鉴权守卫） |
+| `routes/` | `Routes`（路由表） |
 | `views/` | `DesktopShellView`（多 surface 主视图）及各占位 / 错误页 |
 
 ## shadcn/ui 组件

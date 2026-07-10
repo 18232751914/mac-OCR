@@ -27,6 +27,23 @@
         document.title = name;
       }
     </script>
+    <script>
+      // Prevent FOUC on overlay / long-toolbar surfaces.
+      // These windows are transparent so the desktop shows through.
+      // The CSS file (default.css) also applies transparent backgrounds
+      // once loaded, but in production the file:// protocol may delay
+      // the stylesheet.  This inline guard runs synchronously before
+      // the first paint so Chromium never draws an opaque white layer.
+      (function() {
+        var params = new URLSearchParams(location.search);
+        var surface = params.get('surface');
+        if (surface === 'overlay' || surface === 'long-toolbar') {
+          var style = document.createElement('style');
+          style.textContent = 'html,body,#root{background:transparent!important}';
+          document.head.appendChild(style);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

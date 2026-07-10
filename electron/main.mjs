@@ -10,7 +10,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   app,
@@ -27,8 +27,6 @@ import {
   clipboard,
   dialog,
 } from 'electron';
-import { spawn } from 'node:child_process';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const appRoot = path.resolve(__dirname, '..');
@@ -73,8 +71,8 @@ let stitcherReadyPromise = null;
 let longCaptureTimer = null;
 let _longCaptureBusy = false;
 let _longCaptureNoChangeCount = 0;
-let _longCaptureMaxSegments = 30;
-let _longCaptureInterval = 800;
+const _longCaptureMaxSegments = 30;
+const _longCaptureInterval = 800;
 
 const hostState = {
   permissions: {
@@ -282,12 +280,13 @@ function getShellState() {
 
 // ── Auto-launch (login item) ────────────────────────────────────────────────
 //
-// Two‑channel strategy (macOS only):
+// Three‑channel strategy (macOS only):
 //   Channel 1 – Electron's setLoginItemSettings (SMAppService, requires signing).
-//   Channel 2 – AppleScript System Events (works without signing).
-// We try Channel 1 first (fast, native). If it cannot confirm the change we
-// fall back to Channel 2. Both channels manipulate the same system login‑items
-// list visible in System Settings → General → Login Items.
+//   Channel 2 – AppleScript System Events (requires Automation permission).
+//   Channel 3 – LaunchAgent plist (~/Library/LaunchAgents/… .plist, no permissions).
+// We try Channel 1 → 2 → 3 in order. Channel 3 is the ultimate fallback —
+// it writes a .plist that launchd picks up at login, requiring zero entitlements,
+// zero code‑signing, and zero Automation approvals.
 
 // ── Channel 2 helpers ────────────────────────────────────────────────────────
 
@@ -350,6 +349,82 @@ function _isLoginItemEnabledAppleScript() {
   }
 }
 
+// ── Channel 3 helpers (LaunchAgent plist) ──────────────────────────────────
+
+/**
+ * LaunchAgent plist path: ~/Library/LaunchAgents/<app-name>.plist
+ * Only used in packaged builds — dev builds use the Electron binary path
+ * which won't work as a standalone login item.
+ */
+function _launchAgentPlistPath() {
+  return path.join(os.homedir(), 'Library', 'LaunchAgents', `${app.getName()}.plist`);
+}
+
+function _launchAgentPlistXML() {
+  const exe = app.getPath('exe');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.idl.ocr</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${exe}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>`;
+}
+
+/**
+ * Check whether the LaunchAgent plist file exists on disk.
+ * This is the simplest and most reliable detection method — no permissions needed.
+ */
+function _isLoginItemEnabledLaunchAgent() {
+  try {
+    return fs.existsSync(_launchAgentPlistPath());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Enable / disable the login item by writing / removing the LaunchAgent plist.
+ * This is the final fallback because it requires zero system permissions:
+ * no code‑signing, no Automation privileges. The only requirement is that
+ * ~/Library/LaunchAgents/ exists (created by macOS for every user).
+ *
+ * Note: only effective in packaged builds. In dev mode the executable path
+ * would be the Electron binary, which launchd cannot use correctly.
+ */
+function _setLoginItemLaunchAgent(enabled) {
+  if (!app.isPackaged) {
+    console.log('[autolaunch] LaunchAgent: skipped (not packaged)');
+    return false;
+  }
+  try {
+    const plistPath = _launchAgentPlistPath();
+    if (enabled) {
+      fs.mkdirSync(path.dirname(plistPath), { recursive: true });
+      fs.writeFileSync(plistPath, _launchAgentPlistXML(), 'utf8');
+      console.log('[autolaunch] LaunchAgent: plist written →', plistPath);
+    } else {
+      if (fs.existsSync(plistPath)) {
+        fs.unlinkSync(plistPath);
+        console.log('[autolaunch] LaunchAgent: plist removed →', plistPath);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('[autolaunch] LaunchAgent: fs error:', err?.message ?? err);
+    return false;
+  }
+}
+
 // ── Multi‑method read ───────────────────────────────────────────────────────
 
 /**
@@ -370,6 +445,11 @@ function _readSystemLoginItemState() {
   if (process.platform === 'darwin') {
     const as = _isLoginItemEnabledAppleScript();
     if (as !== null) return as;
+  }
+
+  // Channel 3 – LaunchAgent plist (no permissions needed)
+  if (process.platform === 'darwin') {
+    return _isLoginItemEnabledLaunchAgent();
   }
 
   // Cannot determine – lean on persistence.
@@ -409,7 +489,19 @@ function applyLoginItemSettings(enabled) {
         return { success: true, error: null };
       }
     }
-    console.warn('[autolaunch] AppleScript method also failed.');
+    console.warn('[autolaunch] AppleScript method failed, trying LaunchAgent...');
+  }
+
+  // Channel 3 – LaunchAgent .plist (macOS only; zero permissions required)
+  if (process.platform === 'darwin') {
+    if (_setLoginItemLaunchAgent(enabled)) {
+      const verified = _isLoginItemEnabledLaunchAgent();
+      if (verified === enabled) {
+        console.log(`[autolaunch] LaunchAgent ${enabled ? 'installed' : 'removed'} successfully`);
+        return { success: true, error: null };
+      }
+    }
+    console.warn('[autolaunch] LaunchAgent method also failed.');
   }
 
   return {
@@ -583,9 +675,9 @@ function ensureResultWindow() {
 
   resultWindow = createHostWindow({
     width: 560,
-    height: 560,
+    height: 800,
     minWidth: 360,
-    minHeight: 320,
+    minHeight: 460,
     resizable: true,
     movable: true,
     skipTaskbar: true,
@@ -629,6 +721,11 @@ function createOverlayWindow() {
     show: false,
     frame: false,
     transparent: true,
+    // Prevent Chromium from painting a default white layer before the
+    // React app renders. With transparent:true this paint is normally
+    // skipped, but the explicit backgroundColor hedge guarantees it on
+    // every macOS / Electron version.
+    backgroundColor: '#00000000',
     hasShadow: false,
     alwaysOnTop: true,
     fullscreenable: true,
@@ -648,8 +745,33 @@ function createOverlayWindow() {
   });
 
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  void loadRenderer(window, 'overlay');
+
+  // Start loading the renderer immediately (fire-and-forget).  Loading is
+  // NOT awaited here because the dev server may be temporarily unreachable
+  // (e.g. HMR restart), and a rejected promise would crash the caller.
+  // Instead, startScreenCapture waits for did-finish-load downstream.
+  loadRendererWithRetry(window, 'overlay');
+
   return window;
+}
+
+/**
+ * Load the renderer URL into the given window, retrying once on transient
+ * failures (e.g. Vite dev server restart or file:// timing issues).
+ */
+async function loadRendererWithRetry(window, surface) {
+  try {
+    await loadRenderer(window, surface);
+  } catch (err) {
+    // Give the dev server / filesystem a moment to recover, then retry once.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    try {
+      await loadRenderer(window, surface);
+    } catch {
+      // Silently accept the failure — the window will be transparent
+      // (backgroundColor + injected CSS) and the user can retry capture.
+    }
+  }
 }
 
 function ensureOverlayWindowsForDisplays(displayBoundsList) {
@@ -900,8 +1022,6 @@ async function detectScrollChange(prevDataUrl, currDataUrl) {
   try {
     const result = await window.webContents.executeJavaScript(`
       (function() {
-        const imgA = new Image();
-        const imgB = new Image();
         const urls = ${JSON.stringify([prevDataUrl, currDataUrl])};
         return new Promise((resolve) => {
           let loaded = 0;
@@ -998,32 +1118,21 @@ async function ensureOcrExecutable() {
     }
 
     // 3) 本机存在 swiftc 时，编译到 /tmp 缓存（仅开发态可用）。
-    let needsBuild = true;
-    if (fs.existsSync(ocrBinaryPathFallback) && fs.existsSync(ocrScriptPath)) {
-      const binMtime = fs.statSync(ocrBinaryPathFallback).mtimeMs;
-      const srcMtime = fs.statSync(ocrScriptPath).mtimeMs;
-      if (binMtime >= srcMtime) {
-        needsBuild = false;
-      }
-    }
-
-    if (needsBuild) {
-      await new Promise((resolve) => {
-        const child = spawn('swiftc', ['-O', ocrScriptPath, '-o', ocrBinaryPathFallback], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        let err = '';
-        child.stderr.on('data', (chunk) => {
-          err += chunk.toString();
-        });
-        child.on('close', (code) => {
-          if (code !== 0) {
-            console.warn('[ocr] swiftc compile failed, falling back to `swift`:', err.trim().slice(0, 240));
-          }
-          resolve();
-        });
+    await new Promise((resolve) => {
+      const child = spawn('swiftc', ['-O', ocrScriptPath, '-o', ocrBinaryPathFallback], {
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
-    }
+      let err = '';
+      child.stderr.on('data', (chunk) => {
+        err += chunk.toString();
+      });
+      child.on('close', (code) => {
+        if (code !== 0) {
+          console.warn('[ocr] swiftc compile failed, falling back to `swift`:', err.trim().slice(0, 240));
+        }
+        resolve();
+      });
+    });
 
     if (fs.existsSync(ocrBinaryPathFallback)) {
       ocrBinaryReady = true;
@@ -1305,12 +1414,14 @@ async function startScreenCapture(mode = 'single') {
   // Cap thumbnail size to avoid slow full-retina captures. The overlay is mostly
   // darkened, so a 2560-px longest-side thumbnail is enough for selection and OCR.
   const captureMaxSide = 2560;
+  // loadRenderer was fire-and-forget inside createOverlayWindow() so the
+  // overlay windows are already loading in the background.  We resume
+  // the capture pipeline immediately while loading proceeds in parallel.
   const [sources] = await Promise.all([
     desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: captureMaxSide, height: captureMaxSide },
     }),
-    // Let overlay windows start loading in parallel with the screen capture.
     Promise.resolve(overlayWindows),
   ]);
 
@@ -1344,10 +1455,53 @@ async function startScreenCapture(mode = 'single') {
     return { success: false };
   }
 
+  // Wait for every overlay window to finish its initial paint.  On slow
+  // machines or with `file://` protocol the React bundle and CSS may
+  // trail behind the `loadURL` resolve; the `did-finish-load` event
+  // signals that the document (including sourced scripts) is ready.
+  // A 12 s timeout prevents a permanent hang when the dev server is down
+  // (isLoading() stays true after a failed loadURL in some Electron versions).
+  await Promise.race([
+    Promise.all(
+      overlayWindows.map((win) => {
+        return new Promise((resolve) => {
+          if (win.isDestroyed()) return resolve();
+          if (win.webContents.isLoading()) {
+            win.webContents.once('did-finish-load', resolve);
+          } else {
+            resolve();
+          }
+        });
+      }),
+    ),
+    new Promise((resolve) => setTimeout(resolve, 12000)),
+  ]);
+
+  // Inject transparent background CSS into every overlay window to guard
+  // against the FOUC (Flash of Unstyled Content) that would show the
+  // default gradient background before React sets data-desktop-surface.
+  for (const win of overlayWindows) {
+    if (win.isDestroyed()) continue;
+    try {
+      await win.webContents.insertCSS(
+        'html,body,#root{background:transparent!important}',
+      );
+    } catch {
+      // CSS injection is a best-effort safeguard.
+    }
+  }
+
   hostState.activeCaptureSession = {
     mode,
     overlayBounds: displays.map((d) => ({ ...d.bounds })),
   };
+
+  // Broadcast state BEFORE showing overlay windows.  This guarantees
+  // that when the React component calls getShellState() it receives
+  // the activeCaptureSession immediately, avoiding a frame where the
+  // component renders the transparent fallback guard before the real
+  // overlay UI.
+  broadcastShellState();
 
   for (const win of overlayWindows) {
     if (!win.isDestroyed()) {
@@ -1364,7 +1518,6 @@ async function startScreenCapture(mode = 'single') {
   }
 
   overlayWindows[0]?.focus();
-  broadcastShellState();
   return { success: true };
 }
 

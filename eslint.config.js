@@ -34,6 +34,13 @@ const eslintConfig = tseslint.config(
       '@typescript-eslint/no-unused-expressions': 'warn',
     },
   },
+  {
+    files: ['electron/**/*.{js,mjs,cjs}'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.node,
+    },
+  },
 )
 
 export default eslintConfig

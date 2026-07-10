@@ -87,7 +87,7 @@
 | 工具 | `clsx` / `tailwind-merge` / `class-variance-authority` | 2.1.1 / 3.6.0 / 0.7.1 |
 | 图标 | `lucide-react` | 1.17.0 |
 | 路由 | `react-router-dom` | 6.26.1 |
-| 其它 | `date-fns` / `react-day-picker` / `react-markdown` / `tw-animate-css` / `@fontsource-variable/inter` | — |
+| 其它 | `react-day-picker` / `tw-animate-css` / `@fontsource-variable/inter` | — |
 
 ### 开发依赖（工具链）
 
@@ -95,7 +95,7 @@
 |------|----|------|
 | 测试 | `vitest` / `jsdom` | 2.0.5 / 24.1.1 |
 | 类型检查 | `vite-plugin-checker` | 0.11.0 |
-| 检查/格式 | `eslint` / `prettier` / `@typescript-eslint/*` | 9.9.0 / 3.3.3 |
+| 检查/格式 | `eslint` / `prettier` / `globals` / `@typescript-eslint/*` | 9.9.0 / 3.3.3 / 15.9.0 |
 | 别名 | `vite-tsconfig-paths` | 5.0.1 |
 | 打包 | `electron-builder` | ^26.15.3 |
 
@@ -133,8 +133,7 @@ react-app/
 │   ├── api/                   # 远端业务服务层
 │   │   ├── ApiClient.ts       # invokeMethod / streamMethod（注入并刷新 token）
 │   │   ├── AppDtos.ts         # 请求/响应 DTO
-│   │   ├── AuthManager.ts     # Login/SignUp/GetSession…（薄封装）
-│   │   └── Enums.ts           # SampleEnum（示例）
+│   │   └── AuthManager.ts     # Login/SignUp/GetSession…（薄封装）
 │   ├── auth/AuthStore.ts      # Zustand 登录态 + localStorage 持久化
 │   ├── lib/
 │   │   ├── desktopHost.ts         # getSurface / isDesktopHostAvailable
@@ -148,18 +147,14 @@ react-app/
 │   ├── components/
 │   │   ├── ui/                    # shadcn/ui 组件
 │   │   ├── DesktopCaptureOverlay.tsx # 框选覆盖层
-│   │   ├── ErrorBoundary.tsx      # 错误边界
-│   │   └── utils.ts               # IconProps
+│   │   └── ErrorBoundary.tsx      # 错误边界
 │   ├── routes/
-│   │   ├── Routes.tsx             # BrowserRouter 路由表
-│   │   └── ProtectedRoute.tsx     # 鉴权守卫
-│   ├── utils/                     # debounce / localStorage / sessionStorage / roles
+│   │   └── Routes.tsx             # BrowserRouter 路由表
 │   ├── types/
 │   │   ├── desktop-host.d.ts      # Window.desktopHost 类型契约
 │   │   └── json.d.ts              # *.json 模块声明
 │   └── views/
 │       ├── DesktopShellView.tsx   # 多 surface 主视图（核心）
-│       ├── ExampleView.tsx        # 根路由占位页
 │       ├── NotFoundView.tsx       # 404
 │       └── UnauthorizedView.tsx   # 无权限
 ├── public/img/                  # 图标与 DMG 背景图（favicon / icon.png / background.png）
@@ -170,7 +165,7 @@ react-app/
 └── DEV_DOCS.md                  # 本文档
 ```
 
-> 历史工具脚本 `scripts/resize_crop_images.py` 已移除，图片裁剪改由设计侧处理。
+> 历史模板文件（`ExampleView.tsx`、`ProtectedRoute.tsx`、`Enums.ts`、`utils/debounce.ts`、`utils/localStorage.ts`、`utils/sessionStorage.ts`、`utils/roles.ts`、`components/utils.ts`）已移除，这些文件/导出均未被项目引用。
 
 ---
 
@@ -419,7 +414,13 @@ type HostShellState = {
 
 ### 6.6 开机自启动与权限
 
-- `setAutoLaunch({enabled})`：`app.setLoginItemSettings({ openAtLogin: enabled })`；失败返回 `{ success:false, error }`；状态持久化到 `hostState.autoLaunch` 并广播。
+- **三通道策略**（macOS）：
+  - **Channel 1**：`app.setLoginItemSettings({ openAtLogin })`（SMAppService，需代码签名）
+  - **Channel 2**：AppleScript `tell application "System Events"`（需自动化权限）
+  - **Channel 3（最终兜底）**：LaunchAgent plist → `~/Library/LaunchAgents/<app>.plist`（零权限、零签名，纯文件系统操作，`launchd` 在登录时自动加载 `RunAtLoad=true` 的程序）
+- `setAutoLaunch({enabled})` 逐通道尝试并验证，失败则返回 `{ success:false, error }`；状态持久化到 `hostState.autoLaunch` 并广播。
+- 渲染进程错误提示可引导用户 `openLoginItemsSettings()` 打开系统登录项设置。
+- 启动时 `initAutoLaunch()` 仅同步状态，**绝不**调用 `setLoginItemSettings({openAtLogin:false})` 以免误删用户手动添加的登录项。
 - 权限：`systemPreferences` 检测屏幕录制权限，结果进入 `hostState.permissions.screenCapture`；`openScreenCapturePreferences()` 打开系统设置引导授权。
 
 ### 6.7 持久化
@@ -467,7 +468,6 @@ request.minimumTextHeight = 0.0
 - `src/main.tsx`：`ReactDOM.createRoot(...).render(<MainApp/>)`，`import './default.css'`（React.StrictMode 默认关闭，保留注释以便开启）。
 - `src/App.tsx`：`<ErrorBoundary name="App"><TooltipProvider><Routes/></TooltipProvider></ErrorBoundary>`，并调用 `useTheme()` 应用动态主题。
 - `src/routes/Routes.tsx`：`BrowserRouter` 下：`index → DesktopShellView`、`/unauthorized → UnauthorizedView`、`* → NotFoundView`。
-- `src/routes/ProtectedRoute.tsx`：鉴权守卫——已登录但无 session 时调用 `AuthManager.GetSession({})` 恢复会话（与 15s 超时竞速）；校验 `roles`；未登录重定向 `/`，权限不足重定向 `/unauthorized`，通过则渲染 `<Outlet/>`。
 
 ### 9.2 主视图切换（DesktopShellView）
 
@@ -498,7 +498,6 @@ request.minimumTextHeight = 0.0
   - `params` 非数组时自动包装为单元素数组；`options.signal` 支持请求取消。
 - `AppDtos.ts`：所有请求/响应 DTO（PascalCase 以匹配后端契约），如 `LoginRequestDto`/`LoginResponseDto`/`SessionDto`/`ServiceInvocationResponseEnvelopeDto` 等。
 - `AuthManager.ts`：业务方法薄封装，固定 `服务名="Api"`、`管理器="AuthManager"`：`Login`、`SignUp`、`SendPasswordResetEmail`、`ChangePassword`、`UpdateUserEmail`、`UpdateUserPassword`、`UpdateUserName`、`GetSession`。
-- `Enums.ts`：`SampleEnum`（示例枚举模板）。
 
 ### 10.2 鉴权（auth/）
 
@@ -524,9 +523,7 @@ request.minimumTextHeight = 0.0
 
 - `lib/utils.ts`：`cn(...)` = `twMerge(clsx(inputs))`，合并并消解 Tailwind 类名。
 - `lib/fireworks.ts`：`triggerFireworks(durationMs=1000)` 全屏 `pointer-events:none` canvas 烟花动效，动画结束自动清理（用于启用高级功能/保存快捷键等反馈）。
-- `components/utils.ts`：`IconProps`（自定义 SVG 图标 Props 类型）。
 - `components/ErrorBoundary.tsx`：类组件错误边界，捕获子树错误并展示回退 UI（含 `componentStack`），`name` 标识出错片段。
-- `utils/*`：`debounce`（防抖）、`localStorage`/`sessionStorage`（智能读写删，对象自动 JSON 序列化）、`roles`（`ADMIN_ROLE`/`USER_ROLE`/`Roles`）。
 
 ---
 
@@ -592,7 +589,7 @@ recentCaptureResult.text → applyTextTransforms(text, effectiveConfig)
 - 插件：`@vitejs/plugin-react-swc` + `@tailwindcss/vite` + `vite-tsconfig-paths` + `checker({ typescript: true })`；
 - 内联插件 `restartOnDepsChange`：监听 `vite.config.ts`/`package.json`/lock 文件变更时自动重启 dev server；
 - 内联插件 `dynamicManifest`：依据 `VITE_APP_NAME`/`VITE_APP_DESCRIPTION`（回退 `package.json`）动态生成 `site.webmanifest`（dev 中间件 + build `generateBundle`）；
-- `resolve.alias`：`@` → `src`（同时配置 `test.alias` 供 Vitest）；
+- `resolve.alias`：`@` → `src`（同时由 `vite-tsconfig-paths` 解析 `tsconfig` 的 `@/*`）；
 - `server.port`：3000；`build.outDir`：`dist`；`test.environment`：`jsdom`，`include: ['**/*.test.*','**/*.spec.*']`。
 
 ### Tailwind CSS v4
@@ -602,8 +599,8 @@ recentCaptureResult.text → applyTextTransforms(text, effectiveConfig)
 
 ### ESLint（`eslint.config.js`）
 - 扁平配置（`typescript-eslint`）；忽略 `dist` 与 `**/*.test.*`/`**/*.spec.*`；
-- 对 `**/*.{ts,tsx}` 启用 `js.configs.recommended` + `tseslint.configs.recommended` + `react-hooks` 推荐规则 + `react-refresh/only-export-components`；
-- `globals.browser` 作为浏览器全局变量。
+- 对 `**/*.{ts,tsx}` 启用 `js.configs.recommended` + `tseslint.configs.recommended` + `react-hooks` 推荐规则 + `react-refresh/only-export-components`；`globals.browser`；
+- 对 `electron/**/*.{js,mjs,cjs}` 单独配置 `globals.node` 环境。
 
 ### 环境变量（构建期）
 - `VITE_API_URL`（业务服务基地址）、`VITE_APP_NAME`/`VITE_APP_DESCRIPTION`（标题与 manifest）；

@@ -34,7 +34,6 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { getDesktopSurface, isDesktopHostAvailable } from '@/lib/desktopHost';
@@ -79,19 +78,6 @@ const surfaceMetadata = {
   },
 } as const;
 
-function formatPermission(state: string) {
-  switch (state) {
-    case 'granted':
-      return '已允许';
-    case 'denied':
-      return '未允许';
-    case 'restricted':
-      return '受限制';
-    default:
-      return '未知';
-  }
-}
-
 type AdvancedFeaturesPanelProps = {
   config: AdvancedFeaturesConfig;
   onConfigChange: (config: AdvancedFeaturesConfig) => void;
@@ -122,10 +108,10 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
     return map;
   }, [config.regexRules]);
 
-  // 任一配置项被修改都会自动停用该功能（联动要求），并经由 onConfigChange
-  // 由父组件自动保存。
+  // 配置项变更实时生效：保持当前 enabled 状态不变，
+  // 通过 onConfigChange 即时保存并触发文本重新计算。
   const update = (next: AdvancedFeaturesConfig) => {
-    onConfigChange({ ...next, enabled: false });
+    onConfigChange(next);
   };
 
   // 启用/停用开关是用户主动的状态切换，不能被上面的自动停用联动逻辑覆盖。
@@ -401,6 +387,7 @@ const DesktopShellView = () => {
   const settingsCardRef = useRef<HTMLDivElement>(null);
   const panelContentRef = useRef<HTMLDivElement>(null);
   const panelHeaderRef = useRef<HTMLElement>(null);
+  const resultContentRef = useRef<HTMLElement>(null);
 
   const { state, refresh } = useDesktopHostState();
 
@@ -617,6 +604,51 @@ const DesktopShellView = () => {
     observer.observe(el);
     return () => observer.disconnect();
   }, [surface, state.activeCaptureSession, state.longCaptureSession]);
+
+  // 结果窗口自适应高度：
+  // - 高级面板展开时：记录当前窗口高度，计算内容所需高度，若超出则增长窗口
+  // - 高级面板折叠时：恢复到展开前的高度，消除多余空白
+  // 不使用 scrollHeight 或 ResizeObserver，因为 h-screen + flex-1 布局下
+  // flex 子元素会吸收剩余空间，scrollHeight 始终等于窗口高度无法感知变化。
+  useEffect(() => {
+    if (surface !== 'result') return;
+    const el = resultContentRef.current;
+    const fitApi = window.desktopHost?.requestWindowFit;
+    if (!el || !fitApi) return;
+
+    // 等待 React 完成条件渲染（AdvancedFeaturesPanel 挂载/卸载）
+    // 面板内容可能包含异步加载的配置，300ms 确保 DOM 已稳定。
+    const timer = setTimeout(() => {
+      if (!el) return;
+
+      // 计算内容所需的最小高度：遍历所有子元素
+      // flex-1（文本区）使用固定 340px 最小高度，其他子元素取实际 offsetHeight
+      let needed = 0;
+      for (let i = 0; i < el.children.length; i++) {
+        const child = el.children[i] as HTMLElement;
+        if (child.className.includes('flex-1')) {
+          needed += 340; // 文本区最低可用高度
+        } else {
+          needed += child.offsetHeight;
+        }
+      }
+
+      if (advancedExpanded) {
+        // 展开：若当前窗口不足以容纳面板，则增长窗口
+        if (needed > el.clientHeight + 10) {
+          void fitApi(needed);
+        }
+      } else {
+        // 折叠：根据剩余内容高度缩小窗口，不低于 minHeight（460）
+        const collapseTarget = Math.max(needed, 460);
+        if (collapseTarget < el.clientHeight - 20) {
+          void fitApi(collapseTarget);
+        }
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [advancedExpanded, surface]);
 
   const permissionHint = useMemo(() => {
     if (!isDesktopHost) {
@@ -856,7 +888,10 @@ const DesktopShellView = () => {
       : null;
 
     return (
-      <main className="relative flex h-screen flex-col overflow-hidden bg-transparent text-foreground">
+      <main
+        ref={resultContentRef}
+        className="relative flex h-screen flex-col overflow-hidden bg-transparent text-foreground"
+      >
         {/* 顶部高亮渐变 */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-primary/40 via-primary to-primary/40" />
 
@@ -942,7 +977,7 @@ const DesktopShellView = () => {
         )}
 
         {/* 文本编辑区 */}
-        <div className="flex-1 px-4 pb-1">
+        <div className="flex-1 min-h-0 px-4 pb-1">
           <div className="relative h-full overflow-hidden rounded-2xl border border-border/30 bg-glass-bg shadow-inner backdrop-blur-xl transition-all duration-200 focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 focus-within:bg-glass-bg">
             {state.recentCaptureResult?.loading ? (
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 text-primary/50">
@@ -1329,8 +1364,14 @@ const DesktopShellView = () => {
   // 守卫：仅当 surface 明确为 panel 时才渲染主菜单。overlay / long-toolbar 等
   // 窗口在会话状态经 IPC 到达前，此前会「穿透」到下方的主菜单渲染，导致点击
   // 截图瞬间整屏闪过一帧面板 UI。此处对非 panel surface 返回透明占位以消除闪烁。
+  // 生产构建中 Tailwind 类可能延迟解析，补充内联样式确保透明背景立即生效。
   if (surface !== 'panel') {
-    return <div className="h-screen w-screen bg-transparent" />;
+    return (
+      <div
+        className="h-screen w-screen bg-transparent"
+        style={{ background: 'transparent' }}
+      />
+    );
   }
 
   // ── 面板 surface（主菜单） ──

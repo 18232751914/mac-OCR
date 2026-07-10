@@ -115,12 +115,10 @@ export default defineConfig(async () => {
     resolve: {
       alias: {
         '@': srcPath,
-        '@/': `${srcPath}/`,
       },
     },
     server: { port: 3000 },
     test: {
-      alias: { '@/': `${srcPath}/` },
       environment: 'jsdom',
       include: ['**/*.test.*', '**/*.spec.*'],
       globals: true,
