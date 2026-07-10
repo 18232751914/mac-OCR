@@ -99,6 +99,10 @@ export default defineConfig(async () => {
   const srcPath = fileURLToPath(new URL('./src', import.meta.url))
 
   return {
+    // 关键：打包后的产物通过 file:// 协议加载，必须使用相对路径，
+    // 否则 `dist/index.html` 里的 `/assets/...` 会解析到文件系统根目录，
+    // 导致 JS/CSS 全部 404、窗口白屏。
+    base: './',
     build: { outDir: 'dist' },
     plugins: [
       react(),

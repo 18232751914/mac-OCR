@@ -212,7 +212,6 @@ DesktopShellView ──▶ desktopHostState (useDesktopHostState)
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | Vite 开发服务器（浏览器预览，无 Electron 功能） |
 | `npm run desktop:dev` | Electron + Vite 开发模式（`electron/dev.mjs` 并行拉起两者） |
 | `npm run build` | `tsc -b` 类型检查 + Vite 生产构建（输出 `dist/`） |
 | `npm run desktop:build` | 生产构建（等同 `npm run build`） |
@@ -224,25 +223,121 @@ DesktopShellView ──▶ desktopHostState (useDesktopHostState)
 
 ---
 
-## 9. 部署与运行
+## 9. 打包与安装
 
-### 本地开发
+> 平台说明：本应用 OCR 依赖 Apple **Vision** 框架、`screen recording` 等 macOS 原生能力，运行时仅支持 **macOS**。以下打包命令均在 macOS 上执行；`electron-builder` 本身支持交叉构建 Windows/Linux 目标，但本项目代码为 macOS 专属，不提供其它平台的可用产物。
+
+### 9.1 环境准备
+
+| 依赖 | 版本要求 | 说明 |
+|------|----------|------|
+| 操作系统 | macOS 11.0（Big Sur）及以上 | OCR 依赖 Vision 框架；M1/M2/M3 等 Apple Silicon 与 Intel 均支持 |
+| Node.js | 18.x 及以上（推荐 20 LTS） | 提供 `npm` 与构建工具链 |
+| 包管理器 | npm（随 Node 附带）或 pnpm | 本文以 `npm` 为例 |
+| Xcode Command Line Tools | 随系统或 `xcode-select --install` | 提供 `swiftc`/`swift`，离线 OCR 编译 `ocr.swift` 必需 |
+| electron-builder | `devDependencies`（已安装，^26） | 负责将 Electron 运行时 + `dist/` 打包为 `.app`，再由 `hdiutil` 封装 `.dmg` |
+| Electron | `43.0.0`（`devDependencies`） | 桌面运行时 |
+
+安装依赖与命令行工具：
+
+```bash
+# 1. 安装 Node 依赖（含 dev 期的 electron 与 electron-builder）
+npm install
+
+```
+
+### 9.2 打包步骤
+
+打包分两步：先用 Vite 产出渲染产物 `dist/`，再用 `electron-builder` 把 Electron 运行时、`dist/`、`electron/`、`public/` 打进安装包。
+
+```bash
+# 步骤 1：前端生产构建（tsc -b 类型检查 + vite build --mode live，输出 dist/）
+npm run desktop:build
+
+# 步骤 2-a：生成未压缩的 .app（调试/本地验证用，速度快）
+npm run pack
+#   等价：npm run desktop:build && ./node_modules/.bin/electron-builder --dir
+#   产物：mac-arm64/mac-OCR.app 或 mac/mac-OCR.app
+
+# 步骤 2-b：生成可分发安装包 .dmg（发布用，推荐）
+npm run dist
+#   等价：npm run desktop:build && npm run pack && npm run dist:dmg && rm -rf release/mac-arm64
+#   流程：Vite 构建 → electron-builder 产出未压缩 .app（--dir，不写 zip）→
+#         hdiutil 封装为 .dmg（自带「拖入应用程序」引导）→ 清理中间 .app
+#   产物：release/mac-OCR-0.3.15-arm64.dmg
+```
+
+**关键配置参数**（`package.json` 的 `build` 字段，可按需修改）：
+
+| 字段 | 当前值 | 作用 |
+|------|--------|------|
+| `appId` | `com.idl.ocr` | 应用唯一标识，分发/签名用 |
+| `productName` | `mac-OCR` | 安装包与应用显示名 |
+| `electronDist` | `node_modules/electron/dist` | 复用项目内已解压的 Electron 运行时，**打包不再从网络下载发行包** |
+| `files` | `dist/**/*`、`electron/**/*`、`public/**/*`、`package.json` | 打进 asar 的资源（主进程、`ocr.swift`、`stitcher.html`、图标均在其中） |
+| `asar` | `true` | 将源码归档为只读 asar，提升加载与安全性 |
+| `directories.output` | `release/` | 打包产物输出目录（最终仅含 `.dmg`，中间 `.app` 已清理） |
+| `mac.target` | `["dir"]` | `pack` 以 `--dir` 产出未压缩 `.app`（位于 `release/mac-arm64/`），**不写 zip**；最终 `.dmg` 由 `scripts/build-dmg.sh` 用系统 `hdiutil` 生成，无需联网下载 dmg-builder |
+| `mac.category` | `public.app-category.productivity` | App Store / 启动台分类 |
+| `mac.identity` | `null` | 本地无开发者证书时跳过签名（见 9.4 与 9.3） |
+
+> 说明：主进程通过 `app.isPackaged` 自动区分打包态，生产模式以 `file://dist/index.html?surface=` 加载，无需改动代码即可打包。托盘图标路径已做 `dist/` 优先、`public/` 回退的兼容处理。
+
+### 9.3 安装指南
+
+**方式一：开发/调试安装（`.app` 直接拖放）**
+1. 执行 `npm run pack` 得到 `<平台>/mac-OCR.app`。
+2. 将 `mac-OCR.app` 拖入「应用程序」文件夹，或在 Finder 中双击运行。
+3. 首次启动若被 Gatekeeper 拦截（见 9.4），右键 `mac-OCR.app` →「打开」一次即可；或清除隔离属性：
+   ```bash
+   xattr -cr /Applications/mac-OCR.app
+   ```
+
+**方式二：分发安装（`.dmg`）**
+1. 执行 `npm run dist` 得到 `release/mac-OCR-0.3.15-arm64.dmg`。
+2. 双击 `.dmg` 挂载，将 `mac-OCR.app` 拖入「应用程序」文件夹完成安装。
+3. 从启动台或 Spotlight 启动 `mac-OCR`。
+
+**首次运行配置**
+- 授予屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕录制 → 勾选 `mac-OCR`，并重启应用使权限生效（否则截图/框选为空）。
+- 如需开机自启动：在应用设置面板开启（由主进程注册登录项）。
+- 快捷键与主题在设置面板配置，持久化于本地。
+
+**本地开发运行（非打包）**
 ```bash
 npm install
-npm run desktop:dev      # 启动 Vite(3000) + Electron，自动加载渲染进程
+npm run desktop:dev      # 并行启动 Vite(3000) + Electron，自动加载渲染进程
+# 仅预览前端（无 Electron 能力）：npm run dev
 ```
 
-### 生产构建与运行
-```bash
-npm run desktop:build    # 生成 dist/（含 index.html + 资源）
+### 9.4 故障排除
+
+| 现象 / 报错 | 原因 | 解决方案 |
+|------|------|----------|
+| `Package "electron" is only allowed in "devDependencies"` | `electron` 写在 `dependencies` | 将其移至 `devDependencies`（本项目已完成）。 |
+| 打包后托盘无图标 / 找不到图标文件 | 打包后 `public/` 不在 asar 内，而图标仍指向 `public/` | 已修复：`trayIconPath` 改为优先 `dist/img/favicon/...`、回退 `public/`。 |
+| `“mac-OCR” 已损坏，无法打开` / 来自 unidentified developer | 未签名应用被 Gatekeeper 拦截 | 右键 →「打开」；或 `xattr -cr /Applications/mac-OCR.app`；若需对外分发，配置开发者证书并公证（见下）。 |
+| `Cannot find code signature identity` | `mac.identity` 设为具体证书但本机无该证书 | 本机自用设 `"identity": null`（已完成）；对外分发填入 `Developer ID Application: <证书>` 并开启 `notarize`。 |
+| OCR 失败：`离线 OCR 当前仅支持 macOS` 或识别为空 | 未授予屏幕录制权限，或 `swiftc` 缺失 | 系统设置授予屏幕录制权限并重启；`xcode-select --install` 安装 Swift 工具链。 |
+| 打包后窗口空白 / `dist/index.html` 加载失败 | `dist/` 未生成或被 `files` 排除 | 确认先执行 `npm run desktop:build` 生成 `dist/`，且 `build.files` 含 `dist/**/*`。 |
+| `npm run dist` 卡在下载 Electron | 默认会从 GitHub 拉取对应版本 Electron 发行包 | 已配置 `build.electronDist=node_modules/electron/dist` 复用项目内 Electron，不再下载；若仍触发下载，确认该目录存在（`npm install` 后应含 `Electron.app` + `version`）且版本与 `electron` 依赖一致。 |
+| `dmgbuild-bundle-xxx.tar.gz` 下载超时 | 该包是 electron-builder 内置 dmg 工具，本流程**不使用** | 本项目 `.dmg` 由 `scripts/build-dmg.sh` 调用系统 `hdiutil` 生成，完全不依赖 dmg-builder，无需下载；若误跑默认 `electron-builder`（不带 `--dir`）触发下载，请改用 `npm run dist`（已封装正确流程）。 |
+
+**对外分发（他人机器安装）**：需 Apple Developer ID 证书并公证，将 `build.mac` 改为：
+```json
+"mac": {
+  "target": ["dir"],
+  "hardenedRuntime": true,
+  "gatekeeperAssess": false,
+  "identity": "Developer ID Application: <你的证书>",
+  "notarize": { "teamId": "<10位 Team ID>" }
+}
 ```
-构建产物 `dist/` 由 Electron 主进程以 `file://` 方式加载（各 surface 通过 `?surface=` 区分）。若需以 dev server 方式调试打包结果，可先 `npm run dev` 再 `npm run desktop:start`。
+> 本流程 `.dmg` 始终由系统 `hdiutil` 生成（见 `scripts/build-dmg.sh`），与目标格式无关，无需下载 dmg-builder；对外分发时仅需在 `mac` 段补充证书与 `notarize` 配置并重新 `npm run dist` 即可。
 
-> **关于打包分发**：当前 `package.json` 未集成 `electron-builder` / `electron-forge` 等分发工具，也没有 `dist`/`pack` 打包脚本；`desktop:build` 仅完成前端构建。若要产出可分发 `.app`/安装包，需自行引入打包工具并在 `build` 后执行 `electron .` 或封装打包步骤。
-
-### 系统要求
+### 9.5 系统要求
 - macOS 11.0+（OCR 依赖 Vision 框架）
-- Node.js 18+
+- Node.js 18+（仅构建期需要）
 - 首次使用需在「系统设置 → 隐私与安全性 → 屏幕录制」授予本应用权限
 
 ---

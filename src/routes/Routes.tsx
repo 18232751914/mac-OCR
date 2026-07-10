@@ -6,7 +6,7 @@
  * 导出：默认 AppRoutes
  */
 
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { HashRouter as Router, Route, Routes } from 'react-router-dom';
 import DesktopShellView from '@/views/DesktopShellView';
 import NotFoundView from '@/views/NotFoundView';
 import UnauthorizedView from '@/views/UnauthorizedView';

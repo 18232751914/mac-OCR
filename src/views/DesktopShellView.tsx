@@ -597,7 +597,17 @@ const DesktopShellView = () => {
     const el = panelContentRef.current;
     const header = panelHeaderRef.current;
     const fitApi = window.desktopHost?.requestWindowFit;
-    if (surface !== 'panel' || !el || !fitApi) return;
+    // 截图 / 长截图会话进行中，全屏覆盖层已遮罩屏幕，此时调整面板尺寸既无
+    // 意义，又会触发窗口重设动画造成可见的“放大闪烁”，因此跳过适配。
+    if (
+      surface !== 'panel' ||
+      state.activeCaptureSession ||
+      state.longCaptureSession ||
+      !el ||
+      !fitApi
+    ) {
+      return;
+    }
     const fit = () => {
       const height = el.scrollHeight + (header?.offsetHeight ?? 0);
       void fitApi(height);
@@ -606,7 +616,7 @@ const DesktopShellView = () => {
     const observer = new ResizeObserver(fit);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [surface]);
+  }, [surface, state.activeCaptureSession, state.longCaptureSession]);
 
   const permissionHint = useMemo(() => {
     if (!isDesktopHost) {
@@ -1290,6 +1300,13 @@ const DesktopShellView = () => {
         </Card>
       </main>
     );
+  }
+
+  // 守卫：仅当 surface 明确为 panel 时才渲染主菜单。overlay / long-toolbar 等
+  // 窗口在会话状态经 IPC 到达前，此前会「穿透」到下方的主菜单渲染，导致点击
+  // 截图瞬间整屏闪过一帧面板 UI。此处对非 panel surface 返回透明占位以消除闪烁。
+  if (surface !== 'panel') {
+    return <div className="h-screen w-screen bg-transparent" />;
   }
 
   // ── 面板 surface（主菜单） ──

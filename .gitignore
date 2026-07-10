@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.codebuddy
+release
+package-lock.*
+idl.app/
+# 编译产物：build.sh 预编译的 OCR 引擎二进制（不纳入版本控制）
+electron/screen-ocr-engine.bin
+# electron-builder 误配 dmg.background 时在根目录生成的递增序号文件夹
+[0-9]/

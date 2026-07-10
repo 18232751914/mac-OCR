@@ -10,7 +10,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   app,
@@ -36,6 +36,25 @@ const devServerUrl = process.env.ELECTRON_RENDERER_URL ?? 'http://localhost:3000
 const trayIconPath = path.join(appRoot, 'public', 'img', 'favicon', 'A_simple_flat_vector_tray_icon_2026-07-08T07-19-22.png');
 const desktopStatePath = path.join(app.getPath('userData'), 'desktop-state.json');
 const ocrScriptPath = path.join(__dirname, 'ocr.swift');
+
+// 打包内置的 OCR 二进制优先放在 app.asar.unpacked 下（asarUnpack 解出），
+// __dirname 在打包后指向虚拟的 app.asar/electron，需要映射到真实解包路径。
+// 开发态 / 兼容历史逻辑时回退到 /tmp 下缓存的二进制。
+function getBundledOcrBinaryPath() {
+  const unpacked = __dirname.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1');
+  return path.join(unpacked, 'screen-ocr-engine.bin');
+}
+const ocrBinaryPath = getBundledOcrBinaryPath();
+const ocrBinaryPathFallback = path.join(os.tmpdir(), 'screen-ocr-engine.bin');
+
+// 检查命令是否在 PATH 中可用（用于运行时回退判断）。
+function has_cmd(name) {
+  try {
+    return Boolean(execFileSync('command', ['-v', name], { stdio: 'pipe' }).toString().trim());
+  } catch {
+    return false;
+  }
+}
 
 const defaultSingleShortcut = 'CommandOrControl+Shift+1';
 const defaultLongShortcut = 'CommandOrControl+Shift+2';
@@ -788,7 +807,7 @@ function writeImageDataUrlToTempFile(dataUrl) {
 // native binary (cached in tmp, rebuilt only when the source changes) so
 // subsequent recognitions start instantly. Falls back to `swift` if anything
 // goes wrong so behaviour stays stable.
-const ocrBinaryPath = path.join(os.tmpdir(), 'screen-ocr-engine.bin');
+// 注：生产环境使用 build.sh 预编译并打进 app 的二进制（见 ocrBinaryPath 定义）。
 let ocrBinaryReady = false;
 let ocrBinaryFailed = false;
 
@@ -797,9 +816,22 @@ async function ensureOcrExecutable() {
   if (ocrBinaryFailed) return null;
 
   try {
+    // 1) 优先使用打包内置的二进制（生产环境无需 swiftc/swift）。
+    if (fs.existsSync(ocrBinaryPath)) {
+      ocrBinaryReady = true;
+      return ocrBinaryPath;
+    }
+
+    // 2) 回退到 /tmp 下缓存的二进制（开发态或历史编译产物）。
+    if (fs.existsSync(ocrBinaryPathFallback)) {
+      ocrBinaryReady = true;
+      return ocrBinaryPathFallback;
+    }
+
+    // 3) 本机存在 swiftc 时，编译到 /tmp 缓存（仅开发态可用）。
     let needsBuild = true;
-    if (fs.existsSync(ocrBinaryPath) && fs.existsSync(ocrScriptPath)) {
-      const binMtime = fs.statSync(ocrBinaryPath).mtimeMs;
+    if (fs.existsSync(ocrBinaryPathFallback) && fs.existsSync(ocrScriptPath)) {
+      const binMtime = fs.statSync(ocrBinaryPathFallback).mtimeMs;
       const srcMtime = fs.statSync(ocrScriptPath).mtimeMs;
       if (binMtime >= srcMtime) {
         needsBuild = false;
@@ -808,7 +840,7 @@ async function ensureOcrExecutable() {
 
     if (needsBuild) {
       await new Promise((resolve) => {
-        const child = spawn('swiftc', ['-O', ocrScriptPath, '-o', ocrBinaryPath], {
+        const child = spawn('swiftc', ['-O', ocrScriptPath, '-o', ocrBinaryPathFallback], {
           stdio: ['ignore', 'pipe', 'pipe'],
         });
         let err = '';
@@ -824,7 +856,7 @@ async function ensureOcrExecutable() {
       });
     }
 
-    ocrBinaryReady = fs.existsSync(ocrBinaryPath);
+    ocrBinaryReady = fs.existsSync(ocrBinaryPathFallback);
     if (!ocrBinaryReady) {
       ocrBinaryFailed = true;
     }
@@ -832,7 +864,7 @@ async function ensureOcrExecutable() {
     ocrBinaryFailed = true;
   }
 
-  return ocrBinaryReady ? ocrBinaryPath : null;
+  return ocrBinaryReady ? ocrBinaryPathFallback : null;
 }
 
 // Downscale very large images before OCR. Vision `.accurate` cost scales with
@@ -903,6 +935,11 @@ async function recognizeTextFromImage(imageDataUrl) {
   try {
     const exe = await ensureOcrExecutable();
     const useBinary = Boolean(exe);
+    // 无内置二进制时回退到 swift 解释执行，但生产环境通常不携带 swift，
+    // 提前给出明确错误而非等到 spawn 报 ENOENT。
+    if (!useBinary && !has_cmd('swift')) {
+      throw new Error('离线 OCR 引擎不可用：内置二进制缺失且系统未安装 swift。');
+    }
     const command = useBinary ? exe : 'swift';
     const args = useBinary ? [tempFilePath] : [ocrScriptPath, tempFilePath];
 
