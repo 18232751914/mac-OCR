@@ -38,8 +38,8 @@
   - [10.4 文本高级后处理（lib/textTransforms）](#104-文本高级后处理libtexttransforms)
   - [10.5 工具与组件](#105-工具与组件)
 - [11. 关键数据流（端到端）](#11-关键数据流端到端)
-- [12. 配置说明](#12-配置说明)
-- [13. 工具脚本](#13-工具脚本)
+- [12. 配置与打包](#12-配置与打包)
+- [13. 打包脚本（build.sh）](#13-打包脚本buildsh)
 - [14. 注释规范](#14-注释规范)
 
 ---
@@ -49,20 +49,21 @@
 | 属性 | 值 |
 |------|-----|
 | 包名 | `idl`（`package.json` 中 `name`） |
-| 产品名 | 屏幕 OCR / Screen OCR |
-| 版本 | `0.3.15` |
+| 产品名 | `mac-OCR`（`build.productName`） |
+| 版本 | `0.3.15`（`package.json` 中 `version`） |
 | 类型 | ESM（`"type": "module"`） |
 | 主进程入口 | `electron/main.mjs` |
 | 渲染进程入口 | `src/main.tsx`（HTML 入口 `index.html`） |
-| 平台 | macOS only（OCR 依赖 Vision 框架） |
+| 包管理器 | pnpm（见 `pnpm-lock.yaml`，已删除 `package-lock.json`） |
+| 平台 | macOS only（OCR 依赖 Vision 框架，当前仅构建 arm64 架构） |
 | 框架 | Electron 43 + React 18.3.1 + TypeScript 5.6.2 + Tailwind CSS v4 |
 
 ### 功能特性
 
-- **离线 OCR**：Apple Vision 框架，无需网络，中/英/日/韩/繁体多语言；表格区域自动重建为 TSV。
+- **离线 OCR**：Apple Vision 框架，无需网络，中/英/日/韩/繁体多语言；表格区域自动重建为 TSV。识别引擎在**打包时编译为原生二进制**（`electron/screen-ocr-engine.bin`）随应用分发，运行时不依赖 Swift 工具链。
 - **多显示器跨屏框选**：每屏独立 overlay 窗口。
 - **长截图**：多次采集 + 自动重叠去重合并 + 长图拼接。
-- **全局快捷键**：普通截图 / 长截图 / 唤起菜单，可自定义。
+- **全局快捷键**：普通截图 / 长截图 / 截图到剪贴板 / 唤起菜单，可自定义。
 - **托盘菜单**：左键切换面板，右键快捷菜单。
 - **动态主题 / 高级文本后处理 / 开机自启动**。
 
@@ -94,6 +95,7 @@
 | 类型检查 | `vite-plugin-checker` | 0.11.0 |
 | 检查/格式 | `eslint` / `prettier` / `@typescript-eslint/*` | 9.9.0 / 3.3.3 |
 | 别名 | `vite-tsconfig-paths` | 5.0.1 |
+| 打包 | `electron-builder` | ^26.15.3 |
 
 ### 平台特定（macOS 原生）
 
@@ -104,64 +106,69 @@
 | 全局快捷键 | `globalShortcut` | 注册系统级快捷键 |
 | 托盘 | `Tray` / `Menu` | 菜单栏图标与右键菜单 |
 | 自启动 | `app.setLoginItemSettings` | 登录项管理 |
-| OCR | Apple Vision（`ocr.swift`） | 离线文字识别 |
+| OCR | Apple Vision（`ocr.swift` → `screen-ocr-engine.bin`） | 离线文字识别 |
+
+> 包管理器使用 **pnpm**；文档与脚本示例均以 `pnpm` 为准（`npm run xxx` 等价于 `pnpm xxx`）。
 
 ---
 
 ## 3. 项目结构
 
 ```
-idl/
+react-app/
+├── build.sh                   # 一键打包脚本：环境检查 → 编译 OCR 二进制 → 前端构建 → 产出 .app → 生成 .dmg
 ├── electron/
-│   ├── main.mjs          # 主进程入口：窗口/截图/OCR/拼接/IPC/托盘/快捷键/自启动/持久化
-│   ├── preload.mjs       # 预加载：contextBridge 暴露 window.desktopHost
-│   ├── dev.mjs           # 开发启动器：并行 Vite + Electron，互等退出
-│   ├── ocr.swift         # Swift：Vision OCR + 表格重建（三路回退）
-│   └── stitcher.html     # 隐藏窗口：Canvas 长图拼接与重叠检测
+│   ├── main.mjs               # 主进程入口：窗口/截图/OCR/拼接/IPC/托盘/快捷键/自启动/持久化
+│   ├── preload.mjs            # 预加载：contextBridge 暴露 window.desktopHost
+│   ├── dev.mjs                # 开发启动器：并行 Vite + Electron，互等退出
+│   ├── ocr.swift              # Swift 源码：Vision OCR + 表格重建（打包期编译为二进制）
+│   ├── screen-ocr-engine.bin  # 构建期由 ocr.swift 编译出的原生二进制（随应用分发，git 忽略）
+│   └── stitcher.html          # 隐藏窗口：Canvas 长图拼接与重叠检测
 ├── src/
-│   ├── main.tsx          # React 入口（createRoot + MainApp + default.css）
-│   ├── App.tsx           # 根组件（ErrorBoundary + TooltipProvider + Routes + useTheme）
-│   ├── default.css       # 全局样式、玻璃拟态设计系统、@theme inline 变量
-│   ├── api/              # 远端业务服务层
-│   │   ├── ApiClient.ts  # invokeMethod / streamMethod（注入并刷新 token）
-│   │   ├── AppDtos.ts    # 请求/响应 DTO
-│   │   ├── AuthManager.ts# Login/SignUp/GetSession…（薄封装）
-│   │   └── Enums.ts      # SampleEnum（示例）
-│   ├── auth/AuthStore.ts # Zustand 登录态 + localStorage 持久化
+│   ├── main.tsx               # React 入口（createRoot + MainApp + default.css）
+│   ├── App.tsx                # 根组件（ErrorBoundary + TooltipProvider + Routes + useTheme）
+│   ├── default.css            # 全局样式、玻璃拟态设计系统、@theme inline 变量
+│   ├── api/                   # 远端业务服务层
+│   │   ├── ApiClient.ts       # invokeMethod / streamMethod（注入并刷新 token）
+│   │   ├── AppDtos.ts         # 请求/响应 DTO
+│   │   ├── AuthManager.ts     # Login/SignUp/GetSession…（薄封装）
+│   │   └── Enums.ts           # SampleEnum（示例）
+│   ├── auth/AuthStore.ts      # Zustand 登录态 + localStorage 持久化
 │   ├── lib/
-│   │   ├── desktopHost.ts        # getSurface / isDesktopHostAvailable
-│   │   ├── desktopHostState.ts   # HostShellState 类型 + useDesktopHostState
-│   │   ├── textTransforms.ts     # 符号过滤 / 字符替换 / 正则
-│   │   ├── theme.ts              # 7 色调 OKLCH 推导 + applyTheme
-│   │   ├── themeStore.ts         # Zustand 主题色（持久化）
-│   │   ├── useTheme.ts           # 挂载主题 + storage 事件同步
-│   │   ├── fireworks.ts          # triggerFireworks 动效
-│   │   └── utils.ts              # cn()
+│   │   ├── desktopHost.ts         # getSurface / isDesktopHostAvailable
+│   │   ├── desktopHostState.ts    # HostShellState 类型 + useDesktopHostState
+│   │   ├── textTransforms.ts      # 符号过滤 / 字符替换 / 正则
+│   │   ├── theme.ts               # 7 色调 OKLCH 推导 + applyTheme
+│   │   ├── themeStore.ts          # Zustand 主题色（持久化）
+│   │   ├── useTheme.ts            # 挂载主题 + storage 事件同步
+│   │   ├── fireworks.ts           # triggerFireworks 动效
+│   │   └── utils.ts               # cn()
 │   ├── components/
-│   │   ├── ui/                   # 19 个 shadcn/ui 组件
+│   │   ├── ui/                    # shadcn/ui 组件
 │   │   ├── DesktopCaptureOverlay.tsx # 框选覆盖层
-│   │   ├── ErrorBoundary.tsx     # 错误边界
-│   │   └── utils.ts              # IconProps
+│   │   ├── ErrorBoundary.tsx      # 错误边界
+│   │   └── utils.ts               # IconProps
 │   ├── routes/
-│   │   ├── Routes.tsx            # BrowserRouter 路由表
-│   │   └── ProtectedRoute.tsx    # 鉴权守卫
-│   ├── utils/                    # debounce / localStorage / sessionStorage / roles
+│   │   ├── Routes.tsx             # BrowserRouter 路由表
+│   │   └── ProtectedRoute.tsx     # 鉴权守卫
+│   ├── utils/                     # debounce / localStorage / sessionStorage / roles
 │   ├── types/
-│   │   ├── desktop-host.d.ts     # Window.desktopHost 类型契约
-│   │   └── json.d.ts             # *.json 模块声明
+│   │   ├── desktop-host.d.ts      # Window.desktopHost 类型契约
+│   │   └── json.d.ts              # *.json 模块声明
 │   └── views/
-│       ├── DesktopShellView.tsx  # 多 surface 主视图（核心，~1400 行）
-│       ├── ExampleView.tsx       # 根路由占位页
-│       ├── NotFoundView.tsx      # 404
-│       └── UnauthorizedView.tsx  # 无权限
-├── public/img/favicon/  # 各尺寸图标 + safari-pinned-tab.svg
-├── scripts/resize_crop_images.py # 图片批量裁剪工具
+│       ├── DesktopShellView.tsx   # 多 surface 主视图（核心）
+│       ├── ExampleView.tsx        # 根路由占位页
+│       ├── NotFoundView.tsx       # 404
+│       └── UnauthorizedView.tsx   # 无权限
+├── public/img/                  # 图标与 DMG 背景图（favicon / icon.png / background.png）
 ├── package.json / tsconfig*.json / vite.config.ts
 ├── eslint.config.js / prettier.config.mjs / components.json
-├── index.html           # HTML 入口
-├── README.md            # 用户文档
-└── DEV_DOCS.md          # 本文档
+├── index.html                   # HTML 入口
+├── README.md                    # 用户文档
+└── DEV_DOCS.md                  # 本文档
 ```
+
+> 历史工具脚本 `scripts/resize_crop_images.py` 已移除，图片裁剪改由设计侧处理。
 
 ---
 
@@ -169,31 +176,40 @@ idl/
 
 ### 环境要求
 
-- **macOS** 11.0+（Big Sur 及以上，OCR 依赖 Vision 框架）
+- **macOS** 11.0+（Big Sur 及以上，OCR 依赖 Vision 框架；仅支持 Apple Silicon / arm64）
 - **Node.js** 18+
-- **Xcode 命令行工具**（提供 `swift` / `swiftc` 以运行 `ocr.swift`）
+- **pnpm**：`npm install -g pnpm`
+- **Xcode 命令行工具**（`xcode-select --install`）：提供 `swiftc`，用于在**打包期**将 `ocr.swift` 编译为内置 OCR 二进制。最终用户运行应用**不需要**安装它。
 
 ### 安装与启动
 
 ```bash
-npm install
+pnpm install
 
 # 开发模式（Vite dev server + Electron，自动加载渲染进程）
-npm run desktop:dev
+pnpm desktop:dev
 
 # 仅启动 Web 开发服务器（浏览器预览，无 Electron 功能）
-npm run dev
+pnpm dev
 
 # 生产构建（tsc -b 类型检查 + vite build → dist/）
-npm run desktop:build
+pnpm desktop:build
 ```
 
 ### 调试
 
-- 主进程日志输出至启动 `dev.mjs` 的终端（stderr/stdout 经 `stdio: 'inherit'` 透传）。
+- 主进程日志输出至启动 `dev.mjs` 的终端（stderr/stdout 透传）。
 - 渲染进程可用 Electron DevTools 调试。
 - 开发模式由 `ELECTRON_RENDERER_URL`（默认 `http://localhost:3000`）控制渲染进程加载地址；生产模式走 `file://dist/index.html`。
 - `dev.mjs` 会轮询等待 Vite 就绪（最多 30s），就绪后再启动 Electron；退出时同时终止 Vite 与 Electron 子进程，避免孤儿进程。
+
+### 一键打包
+
+```bash
+pnpm dist          # 等价：bash build.sh
+```
+
+详见 [第 13 节](#13-打包脚本buildsh)：该脚本完成环境检查、编译 OCR 二进制、前端构建、产出 `.app`、用 `hdiutil` 生成 `.dmg` 全流程。
 
 ---
 
@@ -206,8 +222,8 @@ npm run desktop:build
 │                   Main Process                        │
 │              (electron/main.mjs)                      │
 │  ┌──────────┐ ┌───────────┐ ┌──────────────────────┐ │
-│  │ Window   │ │ Screenshot │ │  OCR (swift child)   │ │
-│  │ Manager  │ │  Capture   │ │  ocr.swift / binary  │ │
+│  │ Window   │ │ Screenshot │ │  OCR (bundled binary)│ │
+│  │ Manager  │ │  Capture   │ │  screen-ocr-engine    │ │
 │  └──────────┘ └───────────┘ └──────────────────────┘ │
 │  ┌──────────┐ ┌───────────┐ ┌──────────────────────┐ │
 │  │  Tray    │ │ Shortcuts  │ │  State Sync + Persist │ │
@@ -233,7 +249,7 @@ npm run desktop:build
 
 ### 5.2 窗口体系
 
-项目使用多窗口架构，通过 `surface` URL 参数区分窗口身份。通用创建助手 `createHostWindow`（约 L338）固定选项：`show:false`、`frame:false`、`titleBarStyle:'customButtonsOnHover'`、`vibrancy:'sidebar'`、`visualEffectState:'active'`、`transparent:false`、`hasShadow:true`、`resizable:false`、`maximizable:false`、`minimizable:false`、`fullscreenable:false`、`movable:true`，以及 `webPreferences`（`preload` 指向 `preload.mjs`、`contextIsolation:true`、`nodeIntegration:false`、`sandbox:false`）。各窗口再按需覆盖。
+项目使用多窗口架构，通过 `surface` URL 参数区分窗口身份。通用创建助手 `createHostWindow` 固定选项：`show:false`、`frame:false`、`titleBarStyle:'customButtonsOnHover'`、`vibrancy:'sidebar'`、`visualEffectState:'active'`、`transparent:false`、`hasShadow:true`、`resizable:false`、`maximizable:false`、`minimizable:false`、`fullscreenable:false`、`movable:true`，以及 `webPreferences`（`preload` 指向 `preload.mjs`、`contextIsolation:true`、`nodeIntegration:false`、`sandbox:false`）。各窗口再按需覆盖。
 
 | Surface | 变量 | 创建函数 | 尺寸 | 关键覆盖选项 |
 |---------|------|----------|------|--------------|
@@ -263,7 +279,7 @@ await window.loadURL(targetUrl);
 
 ### 5.4 IPC 通信
 
-渲染进程通过 `preload.mjs` 暴露的 `window.desktopHost` 与主进程通信。**主进程 `ipcMain.handle` 通道（共 23 个）与对应 API 方法**：
+渲染进程通过 `preload.mjs` 暴露的 `window.desktopHost` 与主进程通信。**主进程 `ipcMain.handle` 通道（共 24 个）与对应 API 方法**：
 
 | IPC Channel | 方向 | API 方法 | 参数 | 返回 |
 |------------|------|----------|------|------|
@@ -271,8 +287,9 @@ await window.loadURL(targetUrl);
 | `desktop-host:show-result-window` | R→M | `showResultWindow()` | — | `{ success }` |
 | `desktop-host:show-settings-window` | R→M | `showSettingsWindow()` | — | `{ success }` |
 | `desktop-host:toggle-panel-window` | R→M | `togglePanelWindow()` | — | `{ success }` |
-| `desktop-host:start-screen-capture` | R→M | `startScreenCapture()` | — | `{ success }`（内部 `startScreenCapture('single')`） |
-| `desktop-host:start-long-screen-capture` | R→M | `startLongScreenCapture()` | — | `{ success }`（内部 `'long'`） |
+| `desktop-host:start-screen-capture` | R→M | `startScreenCapture('single')` | — | `{ success }` |
+| `desktop-host:start-long-screen-capture` | R→M | `startScreenCapture('long')` | — | `{ success }` |
+| `desktop-host:start-quick-screen-capture` | R→M | `startScreenCapture('quick')` | — | `{ success }`（截图到剪贴板） |
 | `desktop-host:activate-overlay` | R→M | `activateOverlay()` | — | `{ success }` |
 | `desktop-host:complete-screen-capture` | R→M | `completeScreenCapture(selection)` | `OverlaySelection` | `{ success }` |
 | `desktop-host:cancel-capture-session` | R→M | `cancelCaptureSession()` | — | `{ success }` |
@@ -282,7 +299,7 @@ await window.loadURL(targetUrl);
 | `desktop-host:toggle-long-capture-pause` | R→M | `toggleLongCapturePause()` | — | `{ success }` |
 | `desktop-host:save-long-image` | R→M | `saveLongImage()` | — | `{ success, canceled?, path? }` |
 | `desktop-host:save-recent-result-text` | R→M | `saveRecentResultText({text})` | `{ text }` | `{ success }` |
-| `desktop-host:save-shortcut-preference` | R→M | `saveShortcutPreference({mode,accelerator})` | `{ mode:'single'\|'long'\|'menu', accelerator }` | `{ success }` |
+| `desktop-host:save-shortcut-preference` | R→M | `saveShortcutPreference({mode,accelerator})` | `{ mode:'single'\|'long'\|'menu'\|'quick', accelerator }` | `{ success }` |
 | `desktop-host:save-advanced-features` | R→M | `saveAdvancedFeatures({config})` | `{ config: AdvancedFeaturesConfig }` | `{ success }` |
 | `desktop-host:copy-result-text` | R→M | `copyResultText({text})` | `{ text }` | `{ success }` |
 | `desktop-host:get-recent-capture-images` | R→M | `getRecentCaptureImages()` | — | `{ imageDataUrl, longImageDataUrl }` |
@@ -310,14 +327,16 @@ type HostShellState = {
     text: string; capturedAt: string; wasEmpty: boolean;
     imageDataUrl: string | null; longImageDataUrl?: string | null; loading?: boolean;
   } | null;
-  activeCaptureSession: { mode: 'single' | 'long'; overlayBounds: {...} } | null;
+  activeCaptureSession: { mode: 'single' | 'long' | 'quick'; overlayBounds: {...} } | null;
   longCaptureSession: {                   // 长截图会话
     selection; displayId; displayBounds; segmentsCaptured: number;
     latestSegmentPreview?; latestSegmentThumbnail?; capturedTexts?;
     mode: 'auto' | 'manual'; isPaused: boolean; capturedImages?;
   } | null;
   captureErrorMessage: string | null;
-  shortcutPreferences: { single; long; menu: { accelerator; displayText } };
+  shortcutPreferences: {                   // 四组快捷键
+    single; long; menu; quick: { accelerator; displayText };
+  };
   shortcutRegistrationError: string | null;
   autoLaunch: boolean;
   advancedFeatures: {                     // 高级文本后处理配置
@@ -351,9 +370,18 @@ type HostShellState = {
 `recognizeTextFromImage(imageDataUrl)`：
 - 非 darwin 平台直接抛错；
 - 将 data URL 解码写入临时 PNG：`/tmp/screen-ocr-{timestamp}.png`；超大图先降采样到 2000px 内；
-- `spawn('swift', [ocrScriptPath, tempPng])`（优先预编译二进制，失败回退 `swift`/`swiftc` 即时编译）；
-- 解析 stdout 的 `{"text":"..."}`；
+- `ensureOcrExecutable()` 定位 OCR 引擎（三路回退，见下）；`spawn` 调用，解析 stdout 的 `{"text":"..."}`；
 - 临时文件在 `finally` 中无论成败均清理。
+
+**OCR 引擎解析（关键）**：OCR 引擎在**打包时**由 `build.sh` 用 `swiftc -O` 将 `ocr.swift` 编译为原生二进制 `electron/screen-ocr-engine.bin`，并通过 `asarUnpack` 解包到 `app.asar.unpacked/electron/` 随应用分发。运行时按以下优先级选择：
+
+1. **打包内置二进制**：`getBundledOcrBinaryPath()` 将 `__dirname`（`app.asar/electron` 虚拟路径）映射到 `app.asar.unpacked/electron/screen-ocr-engine.bin`，存在则直接使用（生产环境路径，无需 `swiftc`/`swift`）；
+2. **`/tmp` 缓存二进制**：`/tmp/screen-ocr-engine.bin`（开发态或历史编译产物）；
+3. **即时编译回退**：本机存在 `swiftc` 时编译到 `/tmp` 缓存（仅开发态可用）；否则返回 `null`。
+
+若以上均不可用且系统未安装 `swift`，提前抛出明确错误「离线 OCR 引擎不可用：内置二进制缺失且系统未安装 swift」而非等到 `spawn` 报 `ENOENT`。
+
+> 之所以在打包期预编译：开发态下 `spawn('swift', [ocr.swift, ...])` 能工作（本机有 Swift 工具链），但打包后的应用运行环境不含 `swift`/`swiftc`，若不预编译，离线识别会静默失败（结果页显示"当前区域未识别到文字"）。
 
 ### 6.3 长截图与拼接
 
@@ -366,14 +394,15 @@ type HostShellState = {
 ### 6.4 全局快捷键
 
 默认值（`main.mjs` 顶部常量）：
-- `defaultSingleShortcut = 'CommandOrControl+Shift+1'`
-- `defaultLongShortcut = 'CommandOrControl+Shift+2'`
-- `defaultMenuShortcut = 'CommandOrControl+Shift+M'`
+- `defaultSingleShortcut = 'CommandOrControl+Shift+1'`（普通截图识别）
+- `defaultLongShortcut = 'CommandOrControl+Shift+2'`（长截图识别）
+- `defaultMenuShortcut = 'CommandOrControl+Shift+M'`（唤起菜单）
+- `defaultQuickShortcut = 'CommandOrControl+Shift+3'`（截图到剪贴板，不 OCR）
 
 `registerScreenshotShortcut()`：
 1. `globalShortcut.unregisterAll()` 清空；
-2. 重复检测：若 `single/long/menu` 三加速器出现相同组合 → 报错「普通截图、长截图与唤起菜单不能使用相同的快捷键…」；
-3. 分别注册：`single → startScreenCapture('single')`、`long → startScreenCapture('long')`、`menu → togglePanelWindow()`；
+2. 重复检测：若 `single/long/menu/quick` 四加速器出现相同组合 → 报错「普通截图、长截图、唤出菜单与截图（复制到剪贴板）不能使用相同的快捷键…」；
+3. 分别注册：`single → startScreenCapture('single')`、`long → startScreenCapture('long')`、`quick → startScreenCapture('quick')`、`menu → togglePanelWindow()`；
 4. 任一返回 `false`（系统占用）→ `unregisterAll` 并报错「部分快捷键注册失败…」；
 5. 异常 → 「快捷键格式无效…」；
 6. 错误写入 `hostState.shortcutRegistrationError` 并广播。
@@ -383,7 +412,7 @@ type HostShellState = {
 ### 6.5 托盘菜单
 
 - **左键点击**：切换面板窗口（自动对齐菜单栏图标下方），失焦自动隐藏；
-- **右键点击**：弹出快捷菜单（显示/隐藏面板、开始截图、长截图、打开结果窗口、打开设置、退出应用）；
+- **右键点击**：弹出快捷菜单（截图到剪贴板 / 截图识别 / 长截图识别 / 结果窗口 / 设置 / 退出应用）；
 - 图标：`setTemplateImage(true)` 单色模板图标，自动适配明暗模式。
 
 ### 6.6 开机自启动与权限
@@ -393,13 +422,15 @@ type HostShellState = {
 
 ### 6.7 持久化
 
-`loadPersistedState()` 在启动时从 `userData/desktop-state.json` 读取并恢复 `shortcutPreferences`、`autoLaunch`、`advancedFeatures` 等；`persistState()` 在变更时写回。状态广播与持久化分离：图片等瞬态数据不入磁盘。
+`loadPersistedState()` 在启动时从 `userData/desktop-state.json` 读取并恢复 `shortcutPreferences`、`autoLaunch`、`advancedFeatures` 等；`persistState()` 在变更时写回。状态广播与持久化分离：图片等瞬态数据不入磁盘（仅持久化文本结果）。
 
 ---
 
 ## 7. OCR 脚本（electron/ocr.swift）
 
 **原理**：调用 macOS Apple Vision 框架 `VNRecognizeTextRequest`，输出 `{"text":"..."}` JSON（stderr 输出调试日志，stdout 仅输出结果 JSON）。
+
+**构建产物**：本文件由 `build.sh` 在打包期经 `swiftc -O` 编译为 `electron/screen-ocr-engine.bin`（Mach-O arm64 可执行文件），随应用分发；运行时不依赖 Swift 工具链。开发态如无内置二进制，主进程也可直接用 `swift ocr.swift` 解释执行。
 
 **识别配置**：
 ```swift
@@ -442,8 +473,8 @@ request.minimumTextHeight = 0.0
 - **overlay**（且有 `activeCaptureSession`）：渲染 `DesktopCaptureOverlay`，框选后 `completeScreenCapture(selection)` / `cancelCaptureSession()`；
 - **long-toolbar**（且有 `longCaptureSession`）：长截图控制条——`auto`/`manual` 模式切换、`toggleLongCapturePause`、`captureLongSegment`、`finishLongCapture`、`cancelCaptureSession`，并显示采集段数与预览缩略图；
 - **result**：识别结果编辑器——`textarea` 编辑、去除换行符开关、内联「高级功能」面板（`AdvancedFeaturesPanel`：符号过滤/字符替换/正则，修改即自动保存并自动停用）、保存并复制（`saveRecentResultText` + `copyResultText` + `closeCurrentWindow`）、长图预览与保存/复制；
-- **settings**：快捷键录制（3 组，键盘事件经 `toAccelerator` 转为 Electron 风格字符串）、主题色选择、开机自启动开关、错误/成功提示；窗口高度经 `requestWindowFit` + `ResizeObserver` 自适应；
-- **panel**（默认/兜底）：主菜单——权限提示、采集错误、长截图进度、普通/长截图主操作卡片、结果/设置入口、最近识别结果预览。
+- **settings**：快捷键录制（4 组，键盘事件经 `toAccelerator` 转为 Electron 风格字符串）、主题色选择、开机自启动开关、错误/成功提示；窗口高度经 `requestWindowFit` + `ResizeObserver` 自适应；
+- **panel**（默认/兜底）：主菜单——权限提示、采集错误、长截图进度、普通/长截图/截图到剪贴板主操作卡片、结果/设置入口、最近识别结果预览。
 
 ### 9.3 宿主状态订阅
 
@@ -499,7 +530,7 @@ request.minimumTextHeight = 0.0
 
 ## 11. 关键数据流（端到端）
 
-### 单次截图
+### 单次截图识别
 ```
 用户触发（快捷键/面板按钮/托盘）
   → desktopHost.startScreenCapture()
@@ -507,15 +538,22 @@ request.minimumTextHeight = 0.0
   → overlay 窗口 DesktopCaptureOverlay 拖拽框选 → onConfirm(selection)
   → main: completeScreenCapture → resolveCaptureFromOverlaySelection → cropScreenshot
   → finalizeSingleCapture → recognizeTextFromImage
-       （写 /tmp/screen-ocr-*.png → spawn swift ocr.swift → 解析 {"text":"..."} → 清临时文件）
+       （写 /tmp/screen-ocr-*.png → spawn 打包内置二进制（或回退 swift）→ 解析 {"text":"..."} → 清临时文件）
   → 写入 hostState.recentCaptureResult（图片置 null）+ broadcastShellState
   → result 窗口渲染；用户可编辑/后处理/保存/复制
   → 按需 getRecentCaptureImages 拉取原图
 ```
 
+### 截图到剪贴板（quick 模式）
+```
+用户触发（⌘⇧3 / 托盘「截图」）
+  → startScreenCapture('quick') → 框选 → completeScreenCapture
+  → 裁剪图像直接 clipboard.writeImage(...) → 结束（不触发 OCR、不弹结果窗口）
+```
+
 ### 长截图
 ```
-框选 → startLongScreenCapture → longCaptureSession（默认 auto）
+框选 → startScreenCapture('long') → longCaptureSession（默认 auto）
   → long-toolbar 控制条
   → auto：内容变化自动 captureLongSegment；manual：点击「继续采集」
   → 每段 OCR 累积 capturedTexts + capturedImages
@@ -546,14 +584,14 @@ recentCaptureResult.text → applyTextTransforms(text, effectiveConfig)
 
 ---
 
-## 12. 配置说明
+## 12. 配置与打包
 
 ### Vite（`vite.config.ts`）
 - 插件：`@vitejs/plugin-react-swc` + `@tailwindcss/vite` + `vite-tsconfig-paths` + `checker({ typescript: true })`；
 - 内联插件 `restartOnDepsChange`：监听 `vite.config.ts`/`package.json`/lock 文件变更时自动重启 dev server；
 - 内联插件 `dynamicManifest`：依据 `VITE_APP_NAME`/`VITE_APP_DESCRIPTION`（回退 `package.json`）动态生成 `site.webmanifest`（dev 中间件 + build `generateBundle`）；
 - `resolve.alias`：`@` → `src`（同时配置 `test.alias` 供 Vitest）；
-- `server.port`：3000；`build.outDir`：`dist`；`test.environment`：`jsdom`，`include: ['**/*.test.*','**/*.spec.*']`，`setupFiles:['./setup-tests.ts']`。
+- `server.port`：3000；`build.outDir`：`dist`；`test.environment`：`jsdom`，`include: ['**/*.test.*','**/*.spec.*']`。
 
 ### Tailwind CSS v4
 - CSS-first 配置，无 `tailwind.config.js`；
@@ -566,16 +604,41 @@ recentCaptureResult.text → applyTextTransforms(text, effectiveConfig)
 - `globals.browser` 作为浏览器全局变量。
 
 ### 环境变量（构建期）
-见 README §7。核心：`VITE_API_URL`（业务服务基地址）、`VITE_APP_NAME`/`VITE_APP_DESCRIPTION`（标题与 manifest）、`ELECTRON_RENDERER_URL`（dev 渲染地址）。
+- `VITE_API_URL`（业务服务基地址）、`VITE_APP_NAME`/`VITE_APP_DESCRIPTION`（标题与 manifest）；
+- `ELECTRON_RENDERER_URL`（dev 渲染地址）。
+
+### 打包配置（`package.json` 的 `build` 字段）
+| 字段 | 当前值 | 作用 |
+|------|--------|------|
+| `appId` | `com.idl.ocr` | 应用唯一标识 |
+| `productName` | `mac-OCR` | 安装包与应用显示名 |
+| `electronDist` | `node_modules/electron/dist` | 复用项目内已解压的 Electron 运行时，打包不再从网络下载 |
+| `files` | `dist/**/*`、`electron/**/*`、`public/**/*`、`package.json` | 打进 asar 的资源 |
+| `asarUnpack` | `electron/ocr.swift`、`electron/screen-ocr-engine.bin` | 将 OCR 脚本与编译好的二进制解包到 asar 外，供运行时直接执行 |
+| `directories.output` | `release/` | 打包产物输出目录 |
+| `mac.target` | `["dir"]`（arch `arm64`） | 产出未压缩 `.app`，最终 `.dmg` 由 `build.sh` 用系统 `hdiutil` 生成 |
+| `mac.category` | `public.app-category.productivity` | 启动台分类 |
+| `mac.identity` | `null` | 本地无开发者证书时跳过签名 |
 
 ---
 
-## 13. 工具脚本
+## 13. 打包脚本（build.sh）
 
-`scripts/resize_crop_images.py`：按参考图尺寸将目标目录图片以 **cover**（等比缩放 + 居中裁剪）方式裁剪并覆盖原文件。
-- 依赖：`Pillow`（`pip install Pillow`）；支持 JPG/JPEG/PNG/BMP/WEBP/TIF/TIFF/GIF；
-- 参数：`-r/--reference`（参考图，决定目标尺寸，必填）、`-t/--target`（目标目录，必填）、`--include-reference`（连参考图一并处理，默认跳过）、`--dry-run`（仅预览）、`--quality`（JPG/WEBP 质量，默认 95）；
-- 行为：单文件失败仅记录并跳过，不中断整体；完成后输出成功/失败计数。
+根目录 `build.sh` 是一键打包入口（`pnpm dist` 即调用它）。执行阶段：
+
+1. **环境检查**：校验 macOS、hdiutil、Node、pnpm、swiftc（警告级，缺失仅影响 OCR 二进制编译）、electron-builder 及图标资源。
+2. **编译 OCR 二进制**：`swiftc -O electron/ocr.swift -o electron/screen-ocr-engine.bin`（产物 git 忽略），随应用分发，使生产环境无需 `swiftc`/`swift`。
+3. **前端构建**：`pnpm build`（`tsc -b` + `vite build --mode live`，输出 `dist/`）。
+4. **产出 .app**：`electron-builder --dir` 生成未压缩的 `release/mac-arm64/mac-OCR.app`。
+5. **生成 .dmg**（`make_dmg`）：
+   - 创建可读写 DMG（UDRW）→ 挂载（`-nobrowse`，避免桌面图标闪烁）；
+   - AppleScript 设置 Finder 窗口：背景图（`public/img/background.png` 自动缩放为窗口尺寸 800×450）、图标位置（`mac-OCR` 与 `Applications`）、窗口 bounds `{100,100,900,578}`、隐藏工具栏/状态栏、图标大小 56、文字大小 10；
+   - Finder `eject` 确保 `.DS_Store` 落盘（光 `hdiutil detach` 不会触发 Finder 写盘）；
+   - 转换为压缩 UDZO：`release/mac-OCR-<版本号>.dmg`（例如 `release/mac-OCR-0.3.15.dmg`）。
+   - 健壮性：挂载前清理同名残留卷（如 `/Volumes/mac-OCR 1`）；卸载按真实挂载点循环重试直到设备释放；`hdiutil convert` 偶发 `资源暂时不可用`（EAGAIN）时退避重试。
+6. **清理**：删除 `electron-builder` 生成的 `builder-effective-config.yaml` 等中间产物。
+
+> 安装引导界面背景图来自 `public/img/background.png`，构建时被 `sips` 等比缩放为窗口内容区尺寸（800×450），确保完整显示不裁剪。
 
 ---
 
@@ -583,8 +646,7 @@ recentCaptureResult.text → applyTextTransforms(text, effectiveConfig)
 
 - **TS / TSX / .mjs**：文件头 `/** 文件：… 职责：… 依赖：… 导出：… */`；函数/类用 JSDoc（`@param`/`@returns`/`@template`），简体中文为主、关键类型保留英文。
 - **Swift (ocr.swift)**：`///` / `//` 行注释。
-- **Python**：模块与函数 docstring。
 - **CSS (default.css)**：`/* */` 区块注释。
-- 重点标注核心逻辑与易错点（跨显示器坐标换算、OCR 二进制回退、长图去重、图片载荷广播剥离），避免对显而易见的代码冗余说明。
+- 重点标注核心逻辑与易错点（跨显示器坐标换算、OCR 二进制回退、长图去重、图片载荷广播剥离、DMG 资源占用处理），避免对显而易见的代码冗余说明。
 
 > **文档维护**：项目迭代时请同步更新本文档与 `README.md`，尤其是新增 IPC 通道、窗口类型、OCR 逻辑或前端业务层变更时。
