@@ -133,12 +133,26 @@ pnpm install        # 安装依赖（含 electron 与 electron-builder）
 pnpm dist           # 一键打包：环境检查 → 编译 OCR 二进制 → 前端构建 → 产出 .app → 生成 .dmg
 ```
 
-产物位于 `release/mac-OCR-<版本>.dmg`。关键 `package.json` 构建字段：`appId=com.idl.ocr`、`productName=mac-OCR`、`electronDist=node_modules/electron/dist`（复用项目内 Electron，免网络下载）、`asar=true`、`mac.target=["dir"]`（`.dmg` 由 `build.sh` 调 `hdiutil` 生成）、`mac.identity=null`（无证书时跳过签名）。
+产物位于 `release/mac-OCR-<版本>.dmg`。关键构建配置见 `electron-builder.config.cjs`（`appId=com.idl.ocr`、`productName=mac-OCR`、`electronDist=node_modules/electron/dist`、`asar=true`、`mac.target=["dir"]`）。**签名与公证由环境变量驱动**，未设置时不签名（仅限本机自用）；对外分发请设置以下环境变量后重新构建：
+
+```bash
+export CSC_NAME="Developer ID Application: Your Name (TEAMID)"
+# 方式 A：App Store Connect API Key（推荐）
+export APPLE_API_KEY="/path/to/AuthKey_*.p8"
+export APPLE_API_KEY_ID="KEYID"
+export APPLE_API_ISSUER="Issuer-UUID"
+# 方式 B：Apple ID + 专用密码
+export APPLE_ID="you@example.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="10位TeamID"
+
+pnpm dist  # .app 自动以 hardenedRuntime 签名并公证，.dmg 也签名并公证
+```
 
 ### 安装
 
-- **开发 / 调试（`.app`）**：`pnpm dist` 解出的 `mac-OCR.app` 拖入「应用程序」；若被 Gatekeeper 拦截，右键「打开」一次或执行 `xattr -cr /Applications/mac-OCR.app`。
-- **分发（`.dmg`）**：双击挂载，将 `mac-OCR.app` 拖入「应用程序」即可。
+- **开发 / 调试（`.app`）**：`pnpm dist` 解出的 `mac-OCR.app` 拖入「应用程序」；若未签名被 Gatekeeper 拦截，右键「打开」一次或执行 `xattr -cr /Applications/mac-OCR.app`。
+- **分发（`.dmg`）**：设置上述签名证书与公证凭据后构建的 .dmg 在全新 Mac 上可直接双击挂载、拖入「应用程序」正常启动，不会触发「无法验证开发者」警告。
 
 **首次运行**：系统设置 → 隐私与安全性 → 屏幕录制 → 勾选 `mac-OCR` 并重启应用（否则截图为空）；开机自启动与快捷键 / 主题在设置面板配置。
 

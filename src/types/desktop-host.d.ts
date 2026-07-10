@@ -34,6 +34,7 @@ export interface DesktopHostApi {
   saveAdvancedFeatures: (request: { config: import('@/lib/desktopHostState').AdvancedFeaturesConfig }) => Promise<{ success: boolean }>;
   openScreenCapturePreferences: () => Promise<{ success: boolean }>;
   setAutoLaunch: (request: { enabled: boolean }) => Promise<{ success: boolean; error?: string }>;
+  openLoginItemsSettings: () => Promise<{ success: boolean; error?: string }>;
   closeCurrentWindow: () => Promise<{ success: boolean }>;
   requestWindowFit: (contentHeight: number) => Promise<{ success: boolean }>;
   subscribeShellState: (listener: (state: HostShellState) => void) => () => void;

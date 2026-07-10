@@ -16,7 +16,7 @@
     "preview": "vite preview --mode live",
     "format": "prettier ./src --write",
     "lint": "eslint .",
-    "clean": "rm -rf dist release idl.app idl-*-mac.zip* *.dmg latest-mac.yml builder-*.yml builder-*.json",
+    "clean": "rm -rf dist release idl.app idl-*-mac.zip* *.dmg latest-mac.yml builder-*.yml builder-*.json electron/screen-ocr-engine.bin",
     "desktop:start": "ELECTRON_RENDERER_URL=http://localhost:3000 electron .",
     "check-ts": "tsc --noEmit",
     "test:vitest": "vitest --mode test",
@@ -70,46 +70,5 @@
     "vite-plugin-checker": "^0.11.0",
     "vite-tsconfig-paths": "5.0.1",
     "vitest": "2.0.5"
-  },
-  "build": {
-    "appId": "com.idl.ocr",
-    "productName": "mac-OCR",
-    "electronDist": "node_modules/electron/dist",
-    "copyright": "Copyright © 2026",
-    "directories": {
-      "output": "release",
-      "buildResources": "public/img"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "!electron/dev.mjs",
-      "public/**/*",
-      "package.json",
-      "!node_modules",
-      "!**/node_modules/**/*",
-      "!dist/**/*.map"
-    ],
-    "asar": true,
-    "asarUnpack": [
-      "electron/ocr.swift",
-      "electron/screen-ocr-engine.bin"
-    ],
-    "npmRebuild": false,
-    "nodeGypRebuild": false,
-    "compression": "maximum",
-    "electronLanguages": ["en", "zh-CN"],
-    "mac": {
-      "target": [
-        {
-          "target": "dir",
-          "arch": ["arm64"]
-        }
-      ],
-      "category": "public.app-category.productivity",
-      "darkModeSupport": true,
-      "identity": null,
-      "icon": "public/img/icon.png"
-    }
   }
 }

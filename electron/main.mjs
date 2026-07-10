@@ -22,6 +22,7 @@ import {
   ipcMain,
   desktopCapturer,
   screen,
+  shell,
   systemPreferences,
   clipboard,
   dialog,
@@ -280,57 +281,220 @@ function getShellState() {
 }
 
 // ── Auto-launch (login item) ────────────────────────────────────────────────
-// Cross-platform: Electron's setLoginItemSettings covers macOS, Windows and
-// Linux. The call is wrapped so that an unsupported platform or a denied
-// permission can never crash startup or a toggle action.
-function applyLoginItemSettings(enabled) {
+//
+// Two‑channel strategy (macOS only):
+//   Channel 1 – Electron's setLoginItemSettings (SMAppService, requires signing).
+//   Channel 2 – AppleScript System Events (works without signing).
+// We try Channel 1 first (fast, native). If it cannot confirm the change we
+// fall back to Channel 2. Both channels manipulate the same system login‑items
+// list visible in System Settings → General → Login Items.
+
+// ── Channel 2 helpers ────────────────────────────────────────────────────────
+
+/** Derive the .app bundle path from the running executable. */
+function _appBundlePath() {
+  const exe = app.getPath('exe');
+  // e.g. /Applications/mac-OCR.app/Contents/MacOS/mac-OCR → /Applications/mac-OCR.app
+  return path.dirname(path.dirname(path.dirname(exe)));
+}
+
+/**
+ * Enable / disable the login item via AppleScript System Events.
+ * Returns true on success, false on failure.
+ */
+function _setLoginItemAppleScript(enabled) {
+  const appName = app.getName();
   try {
-    if (typeof app.setLoginItemSettings !== 'function') {
-      return { success: false, error: '当前平台不支持开机自启动设置。' };
+    if (enabled) {
+      execFileSync('osascript', [
+        '-e', 'tell application "System Events"',
+        '-e', `if not (exists login item "${appName}") then`,
+        '-e', `make login item at end with properties {path:"${_appBundlePath()}", hidden:false}`,
+        '-e', 'end if',
+        '-e', 'end tell',
+      ]);
+    } else {
+      execFileSync('osascript', [
+        '-e', 'tell application "System Events"',
+        '-e', `if exists login item "${appName}" then`,
+        '-e', `delete login item "${appName}"`,
+        '-e', 'end if',
+        '-e', 'end tell',
+      ]);
     }
-    app.setLoginItemSettings({ openAtLogin: enabled });
-    return { success: true, error: null };
-  } catch (err) {
-    console.warn('[autolaunch] setLoginItemSettings failed:', err?.message ?? err);
-    return { success: false, error: '设置开机自启动失败，请检查系统权限或杀毒软件拦截。' };
+    return true;
+  } catch (_err) {
+    return false;
   }
 }
 
-// Apply the persisted preference at startup. We also sync the in-memory value
-// from the real system state so the toggle never lies about its status.
-function initAutoLaunch() {
+/**
+ * Read the current login‑item state via AppleScript.
+ * Returns true/false, or null if the check could not complete.
+ */
+function _isLoginItemEnabledAppleScript() {
+  try {
+    const out = execFileSync('osascript', [
+      '-e', 'tell application "System Events"',
+      '-e', 'set _names to name of every login item',
+      '-e', `if _names contains "${app.getName()}" then`,
+      '-e', 'return "1"',
+      '-e', 'else',
+      '-e', 'return "0"',
+      '-e', 'end if',
+      '-e', 'end tell',
+    ], { encoding: 'utf8', timeout: 5000 }).trim();
+    return out === '1';
+  } catch {
+    return null;
+  }
+}
+
+// ── Multi‑method read ───────────────────────────────────────────────────────
+
+/**
+ * Determine whether the app is currently a login item by trying all available
+ * channels. Returns a boolean (best‑effort), defaulting to the persisted
+ * preference when no channel can be queried.
+ */
+function _readSystemLoginItemState() {
+  // Channel 1 – Electron
   try {
     if (typeof app.getLoginItemSettings === 'function') {
-      const systemState = app.getLoginItemSettings();
-      // First run (no persisted value) keeps the default ON; otherwise trust
-      // what we persisted. Apply it so a fresh install actually registers.
-      const desired = hostState.autoLaunch;
-      app.setLoginItemSettings({ openAtLogin: desired });
-      // Reflect whatever the OS ultimately reports (some setups override).
-      if (typeof systemState.openAtLogin === 'boolean') {
-        hostState.autoLaunch = systemState.openAtLogin;
+      const s = app.getLoginItemSettings();
+      if (typeof s.openAtLogin === 'boolean') return s.openAtLogin;
+    }
+  } catch { /* fall through */ }
+
+  // Channel 2 – AppleScript (macOS only)
+  if (process.platform === 'darwin') {
+    const as = _isLoginItemEnabledAppleScript();
+    if (as !== null) return as;
+  }
+
+  // Cannot determine – lean on persistence.
+  return hostState.autoLaunch;
+}
+
+// ── Multi‑method write + verify ─────────────────────────────────────────────
+
+/**
+ * Enable or disable the login item by trying all available channels.
+ * Verifies the result after each attempt.
+ */
+function applyLoginItemSettings(enabled) {
+  if (typeof app.setLoginItemSettings !== 'function') {
+    return { success: false, error: '当前平台不支持开机自启动设置。' };
+  }
+
+  // Channel 1 – Electron native API
+  try {
+    app.setLoginItemSettings({ openAtLogin: enabled });
+    const after = app.getLoginItemSettings();
+    if (typeof after.openAtLogin === 'boolean' && after.openAtLogin === enabled) {
+      return { success: true, error: null };
+    }
+  } catch (err) {
+    console.warn('[autolaunch] Electron API threw:', err?.message ?? err);
+  }
+
+  // Channel 2 – AppleScript (macOS only; works without code‑signing)
+  // Also serves as verification for Channel 1 when it reports "success"
+  // but the system has silently rejected the SMAppService call.
+  if (process.platform === 'darwin') {
+    if (_setLoginItemAppleScript(enabled)) {
+      const verified = _isLoginItemEnabledAppleScript();
+      if (verified === enabled) {
+        console.log(`[autolaunch] AppleScript ${enabled ? 'registered' : 'unregistered'} successfully`);
+        return { success: true, error: null };
       }
     }
+    console.warn('[autolaunch] AppleScript method also failed.');
+  }
+
+  return {
+    success: false,
+    error: '设置开机自启动失败。请在系统设置中手动添加/移除登录项，或检查自动化权限。',
+  };
+}
+
+// ── Startup sync ────────────────────────────────────────────────────────────
+
+/**
+ * At startup: read the real system state and sync our in‑memory state to match.
+ * NEVER calls setLoginItemSettings({openAtLogin:false}) here — that would
+ * DELETE a login item the user manually added via System Settings.
+ * Only conditionally ENABLES when the user explicitly wants it ON.
+ */
+function initAutoLaunch() {
+  try {
+    if (typeof app.getLoginItemSettings !== 'function') return;
+
+    const systemOn = _readSystemLoginItemState();
+
+    if (systemOn) {
+      // System has the app as a login item — trust it unconditionally.
+      console.log('[autolaunch] startup: system ON → sync persisted true');
+      hostState.autoLaunch = true;
+      persistState();
+      return;
+    }
+
+    // System OFF — register only if the user explicitly wanted it ON.
+    if (hostState.autoLaunch === true) {
+      console.log('[autolaunch] startup: system OFF but persisted ON → attempting registration');
+      const { success } = applyLoginItemSettings(true);
+      hostState.autoLaunch = success ? true : false;
+      persistState();
+      return;
+    }
+
+    // System OFF + persisted OFF → already in sync.
+    console.log('[autolaunch] startup: system OFF, persisted OFF → in sync');
   } catch (err) {
     console.warn('[autolaunch] init failed:', err?.message ?? err);
   }
 }
 
+// ── Runtime toggle ──────────────────────────────────────────────────────────
+
 async function setAutoLaunch(request) {
   const desired = Boolean(request?.enabled);
-  const previous = hostState.autoLaunch;
-  hostState.autoLaunch = desired;
-  persistState();
+  console.log(`[autolaunch] setAutoLaunch: requested=${desired}, current=${hostState.autoLaunch}`);
 
+  const previous = hostState.autoLaunch;
   const { success, error } = applyLoginItemSettings(desired);
+
   if (!success) {
-    // Roll back so the UI stays consistent with the actual system state.
+    // Roll back — system rejected the change.
     hostState.autoLaunch = previous;
     persistState();
+    console.warn(`[autolaunch] setAutoLaunch FAILED → rolled back to ${previous}. ${error}`);
+    broadcastShellState();
+    return { success: false, error };
   }
 
+  // Success — persist + broadcast.
+  hostState.autoLaunch = desired;
+  persistState();
+  console.log(`[autolaunch] setAutoLaunch SUCCESS: autoLaunch=${desired}`);
   broadcastShellState();
-  return { success, error: error ?? undefined };
+  return { success: true };
+}
+
+// ── Open System Settings helper ─────────────────────────────────────────────
+
+function openLoginItemsSettings() {
+  if (process.platform !== 'darwin') {
+    return { success: false, error: '当前平台不支持此操作。' };
+  }
+  try {
+    shell.openExternal('x-apple.systempreferences:com.apple.LoginItems-Settings.extension');
+    return { success: true };
+  } catch (err) {
+    console.warn('[autolaunch] openLoginItemsSettings failed:', err?.message ?? err);
+    return { success: false, error: '无法打开系统登录项设置。' };
+  }
 }
 
 function broadcastShellState() {
@@ -810,22 +974,27 @@ function writeImageDataUrlToTempFile(dataUrl) {
 // 注：生产环境使用 build.sh 预编译并打进 app 的二进制（见 ocrBinaryPath 定义）。
 let ocrBinaryReady = false;
 let ocrBinaryFailed = false;
+// 缓存已解析为可用的 OCR 可执行文件路径，避免"下次调用返回错误路径"的 bug
+//（例如上一条分支用的是 fallback 缓存，下次却返回 ocrBinaryPath 打包路径）。
+let ocrResolvedPath = null;
 
 async function ensureOcrExecutable() {
-  if (ocrBinaryReady) return ocrBinaryPath;
+  if (ocrBinaryReady) return ocrResolvedPath;
   if (ocrBinaryFailed) return null;
 
   try {
     // 1) 优先使用打包内置的二进制（生产环境无需 swiftc/swift）。
     if (fs.existsSync(ocrBinaryPath)) {
       ocrBinaryReady = true;
-      return ocrBinaryPath;
+      ocrResolvedPath = ocrBinaryPath;
+      return ocrResolvedPath;
     }
 
     // 2) 回退到 /tmp 下缓存的二进制（开发态或历史编译产物）。
     if (fs.existsSync(ocrBinaryPathFallback)) {
       ocrBinaryReady = true;
-      return ocrBinaryPathFallback;
+      ocrResolvedPath = ocrBinaryPathFallback;
+      return ocrResolvedPath;
     }
 
     // 3) 本机存在 swiftc 时，编译到 /tmp 缓存（仅开发态可用）。
@@ -856,15 +1025,18 @@ async function ensureOcrExecutable() {
       });
     }
 
-    ocrBinaryReady = fs.existsSync(ocrBinaryPathFallback);
-    if (!ocrBinaryReady) {
-      ocrBinaryFailed = true;
+    if (fs.existsSync(ocrBinaryPathFallback)) {
+      ocrBinaryReady = true;
+      ocrResolvedPath = ocrBinaryPathFallback;
+      return ocrResolvedPath;
     }
+
+    ocrBinaryFailed = true;
   } catch {
     ocrBinaryFailed = true;
   }
 
-  return ocrBinaryReady ? ocrBinaryPathFallback : null;
+  return null;
 }
 
 // Downscale very large images before OCR. Vision `.accurate` cost scales with
@@ -1822,6 +1994,7 @@ function registerIpcHandlers() {
   });
   ipcMain.handle('desktop-host:open-screen-capture-preferences', openScreenCapturePreferences);
   ipcMain.handle('desktop-host:set-auto-launch', setAutoLaunch);
+  ipcMain.handle('desktop-host:open-login-items-settings', openLoginItemsSettings);
   ipcMain.handle('desktop-host:close-current-window', closeCurrentWindow);
   ipcMain.handle('desktop-host:request-window-fit', (event, contentHeight) => {
     const win = BrowserWindow.fromWebContents(event.sender);

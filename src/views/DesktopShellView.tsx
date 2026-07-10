@@ -232,7 +232,7 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
                   <button
                     type="button"
                     onClick={() => removeSymbol(symbol)}
-                    className="text-muted-foreground transition-colors hover:text-destructive"
+                    className="cursor-pointer text-muted-foreground transition-colors hover:text-destructive"
                     title="移除"
                   >
                     <X className="h-3 w-3" />
@@ -322,7 +322,7 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
                     <button
                       type="button"
                       onClick={() => updateRegex(index, { mode: 'replace' })}
-                      className={`px-2 py-1 text-[11px] font-medium transition-colors ${
+                      className={`cursor-pointer px-2 py-1 text-[11px] font-medium transition-colors ${
                         rule.mode === 'replace'
                           ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:bg-muted'
@@ -333,7 +333,7 @@ function AdvancedFeaturesPanel({ config, onConfigChange }: AdvancedFeaturesPanel
                     <button
                       type="button"
                       onClick={() => updateRegex(index, { mode: 'filter' })}
-                      className={`px-2 py-1 text-[11px] font-medium transition-colors ${
+                      className={`cursor-pointer px-2 py-1 text-[11px] font-medium transition-colors ${
                         rule.mode === 'filter'
                           ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:bg-muted'
@@ -711,7 +711,7 @@ const DesktopShellView = () => {
             <div className="flex rounded-lg border border-border/40 bg-muted/40 p-0.5">
               <button
                 type="button"
-                className={`rounded-md px-3 py-1 text-[11px] font-medium transition-all duration-200 ${
+                className={`cursor-pointer rounded-md px-3 py-1 text-[11px] font-medium transition-all duration-200 ${
                   mode === 'auto'
                     ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
                     : 'text-muted-foreground hover:text-foreground'
@@ -722,7 +722,7 @@ const DesktopShellView = () => {
               </button>
               <button
                 type="button"
-                className={`rounded-md px-3 py-1 text-[11px] font-medium transition-all duration-200 ${
+                className={`cursor-pointer rounded-md px-3 py-1 text-[11px] font-medium transition-all duration-200 ${
                   mode === 'manual'
                     ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
                     : 'text-muted-foreground hover:text-foreground'
@@ -1234,7 +1234,7 @@ const DesktopShellView = () => {
                       title={t.name}
                       onClick={() => setTheme(t.id)}
                       className={cn(
-                        'flex h-9 items-center gap-2 rounded-xl border px-3 text-[12px] font-medium transition-all duration-200',
+                        'flex h-9 cursor-pointer items-center gap-2 rounded-xl border px-3 text-[12px] font-medium transition-all duration-200',
                         active
                           ? 'border-primary/50 bg-primary/10 text-foreground shadow-sm shadow-primary/15'
                           : 'border-glass-border bg-glass-bg text-muted-foreground hover:border-border/60 hover:text-foreground',
@@ -1265,19 +1265,43 @@ const DesktopShellView = () => {
                 size="sm"
                 checked={state.autoLaunch}
                 onCheckedChange={async (checked) => {
-                  const res = await window.desktopHost?.setAutoLaunch({ enabled: checked });
-                  if (res && !res.success) {
-                    setAutoLaunchError(res.error ?? '设置开机自启动失败，请检查系统权限。');
-                  } else {
-                    setAutoLaunchError('');
+                  if (!window.desktopHost) {
+                    setAutoLaunchError('桌面宿主不可用，请在 Electron 环境中操作。');
+                    return;
+                  }
+                  try {
+                    const res = await window.desktopHost.setAutoLaunch({ enabled: checked });
+                    if (res && !res.success) {
+                      setAutoLaunchError(
+                        res.error ?? '设置开机自启动失败，请检查系统权限。',
+                      );
+                      console.warn('[autolaunch] setAutoLaunch failed:', res.error);
+                    } else {
+                      setAutoLaunchError('');
+                    }
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    console.error('[autolaunch] setAutoLaunch IPC error:', msg);
+                    setAutoLaunchError(`开机自启动设置异常：${msg}`);
                   }
                 }}
               />
             </div>
 
             {autoLaunchError && (
-              <div className="rounded-2xl border border-destructive/15 bg-destructive/5 px-3.5 py-3 text-[13px] leading-relaxed text-destructive">
-                {autoLaunchError}
+              <div className="space-y-2 rounded-2xl border border-destructive/15 bg-destructive/5 px-3.5 py-3">
+                <p className="text-[13px] leading-relaxed text-destructive">
+                  {autoLaunchError}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-[11px]"
+                  onClick={() => void window.desktopHost?.openLoginItemsSettings()}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  打开系统登录项设置
+                </Button>
               </div>
             )}
 
@@ -1359,7 +1383,7 @@ const DesktopShellView = () => {
               {isDesktopHost ? (
                 <button
                   type="button"
-                  className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 underline decoration-amber-300 underline-offset-4 hover:text-amber-900 transition-colors"
+                  className="mt-2 inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-amber-700 underline decoration-amber-300 underline-offset-4 hover:text-amber-900 transition-colors"
                   onClick={() => void window.desktopHost?.openScreenCapturePreferences()}
                 >
                   打开系统权限设置

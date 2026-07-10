@@ -25,15 +25,15 @@ ELECTRON_BUILDER="$ROOT/node_modules/.bin/electron-builder"
 APP_NAME="mac-OCR"
 APP_VERSION="0.0.0"
 
-# DMG 安装窗口内容区尺寸（宽度 800 / 高度 450）。
+# DMG 安装窗口内容区尺寸（宽度 640 / 高度 360）。
 # 背景图会按此尺寸缩放，确保在安装窗口中完整显示、不裁剪。
-DMG_WIN_WIDTH=800
-DMG_WIN_HEIGHT=450
+DMG_WIN_WIDTH=440
+DMG_WIN_HEIGHT=260
 # bounds 包含标题栏，因此总高度 = 内容区高度 + 28（标题栏约 28px）。
-DMG_WIN_BOUNDS="{100, 100, 900, 578}"
-# 图标位置按窗口尺寸比例从 1280x720 缩放（0.625 倍）。
-DMG_APP_ICON_POS="{94, 141}"
-DMG_APPS_ICON_POS="{406, 141}"
+DMG_WIN_BOUNDS="{100, 100, 540, 388}"
+# 图标位置按窗口尺寸比例从 1280x720 缩放（0.5 倍）。
+DMG_APP_ICON_POS="{125, 150}"
+DMG_APPS_ICON_POS="{325, 150}"
 
 # 临时挂载目录（dmg 制作用），trap 中清理。
 DMG_STAGING=""
@@ -199,10 +199,10 @@ check_environment() {
   log "环境检查通过。"
 }
 
-# 从 package.json 解析 productName 与 version。
+# 从 electron-builder.config.cjs 与 package.json 解析 productName / version。
 read_app_meta() {
   local name version
-  name="$(node -p "require('./package.json').build?.productName || require('./package.json').name" 2>/dev/null || true)"
+  name="$(node -p "try{require('./electron-builder.config.cjs').productName}catch(e){require('./package.json').name}" 2>/dev/null || true)"
   version="$(node -p "require('./package.json').version" 2>/dev/null || true)"
   [ -n "${name}" ] && APP_NAME="${name}"
   [ -n "${version}" ] && APP_VERSION="${version}"
@@ -269,7 +269,7 @@ build_app() {
   rm -rf "$RELEASE_DIR/mac-arm64" "$RELEASE_DIR/mac" 2>/dev/null || true
 
   # --dir 仅产出解包后的 .app（沿用现有 pack 逻辑），dmg 交由 hdiutil 生成。
-  run "${ELECTRON_BUILDER}" --dir \
+  run "${ELECTRON_BUILDER}" --dir --config electron-builder.config.cjs \
     || fail "electron-builder 打包中断。常见原因：依赖损坏、electronDist 缺失、磁盘空间不足。详见 ${LOG}。"
 
   APP_PATH="$(locate_app_bundle)"
@@ -396,8 +396,8 @@ tell application "Finder"
     set statusbar visible of container window to false
     set the bounds of container window to ${DMG_WIN_BOUNDS}
     set arrangement of theViewOptions to not arranged
-    set icon size of theViewOptions to 56
-    set text size of theViewOptions to 10
+    set icon size of theViewOptions to 48
+    set text size of theViewOptions to 11
     set label position of theViewOptions to bottom
     set position of item "$app_basename" to ${DMG_APP_ICON_POS}
     set position of item "Applications" to ${DMG_APPS_ICON_POS}
@@ -484,6 +484,63 @@ EOF
   log "🎉 打包成功：${dmg_path} （大小 ${size}）"
 }
 
+# ── 阶段 5：签名与公证 dmg（仅当提供开发者证书时）──────────────────────────
+# 目标：对外分发的 dmg 经签名与公证后，在全新 Mac 上可正常安装启动，
+# 不被 Gatekeeper 以"无法验证开发者"拦截。
+#
+# 前置要求（所有变量均为可选，缺一则跳过）：
+#   export CSC_NAME="Developer ID Application: Your Name (TEAMID)"
+#   export APPLE_API_KEY="/path/to/AuthKey_*.p8"
+#   export APPLE_API_KEY_ID="KEYID"
+#   export APPLE_API_ISSUER="xxxx-xxxx-xxxx-xxxx"
+# 或（Apple ID + 专用密码方式）：
+#   export APPLE_ID="you@example.com"
+#   export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+#   export APPLE_TEAM_ID="10位TeamID"
+#
+# 原理：electron-builder 在 build_app 阶段已签名+公证 .app（通过 electron-builder.config.cjs
+# 中的 notarize 配置），并将公证票装订进 .app bundle。本步骤将最终 .dmg 也签名+公证，
+# 确保拖拽安装体验中不会出现任何安全警告。
+sign_dmg() {
+  local dmg_name="${APP_NAME}-${APP_VERSION}.dmg"
+  local dmg_path="$RELEASE_DIR/${dmg_name}"
+
+  if [ -z "${CSC_NAME:-}" ]; then
+    warn "未设置 CSC_NAME：跳过 dmg 签名/公证。"
+    warn "该 dmg 仅供本机自用；在全新 Mac 上首次打开会被 Gatekeeper 拦截。"
+    warn "对外分发请设置 CSC_NAME + 公证凭据（APPLE_API_KEY 或 APPLE_ID，见本函数注释）。"
+    return 0
+  fi
+
+  stage "阶段 5/5：签名与公证 dmg"
+
+  [ -f "${dmg_path}" ] || fail "找不到 dmg 文件：${dmg_path}"
+
+  # 1) 签署 .dmg（含时间戳，确保过期后仍可用）。
+  run codesign --sign "${CSC_NAME}" --timestamp --options runtime "${dmg_path}" \
+    || warn "dmg 代码签名失败（不影响 .app 内部已公证票，但推荐重新签名）。"
+
+  # 2) 公证 .dmg。
+  local notary_opts=()
+  if [ -n "${APPLE_API_KEY:-}" ]; then
+    notary_opts=(--key "${APPLE_API_KEY}" --key-id "${APPLE_API_KEY_ID:-}" --issuer "${APPLE_API_ISSUER:-}")
+  elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]; then
+    notary_opts=(--apple-id "${APPLE_ID}" --password "${APPLE_APP_SPECIFIC_PASSWORD}" --team-id "${APPLE_TEAM_ID:-}")
+  else
+    warn "未提供公证凭据（APPLE_API_KEY 或 APPLE_ID），跳过 dmg 公证。"
+    warn ".app 内部公证票通常已足够通过 Gatekeeper（electron-builder 在打包阶段已公证 .app）。"
+    return 0
+  fi
+
+  if run xcrun notarytool submit "${dmg_path}" "${notary_opts[@]}" --wait; then
+    run xcrun stapler staple "${dmg_path}" \
+      || warn "公证成功但 stapler 装订 dmg 票证失败；可稍后手动执行 xcrun stapler staple \"${dmg_path}\"。"
+    log "dmg 公证完成并已装订票证。"
+  else
+    warn "dmg 公证失败；.app 内部公证票通常已足够通过 Gatekeeper，可继续分发。"
+  fi
+}
+
 # ── 主流程 ───────────────────────────────────────────────────────────────────
 main() {
   log "开始一键打包 .dmg（项目根目录：${ROOT}）"
@@ -499,6 +556,7 @@ main() {
   build_frontend
   build_app
   make_dmg
+  sign_dmg
 
   # 清理 electron-builder 生成的临时配置文件。
   if [ -f "$ROOT/builder-effective-config.yaml" ]; then

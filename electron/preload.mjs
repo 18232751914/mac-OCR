@@ -80,6 +80,9 @@ const desktopHost = {
   setAutoLaunch(request) {
     return ipcRenderer.invoke('desktop-host:set-auto-launch', request);
   },
+  openLoginItemsSettings() {
+    return ipcRenderer.invoke('desktop-host:open-login-items-settings');
+  },
   closeCurrentWindow() {
     return ipcRenderer.invoke('desktop-host:close-current-window');
   },
