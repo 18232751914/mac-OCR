@@ -18,12 +18,18 @@ permissions:
 jobs:
   release:
     runs-on: macos-latest
+    # 构建产物 15 天过期，足够排查问题
+    timeout-minutes: 60
 
     steps:
+      - name: Show runner info
+        run: |
+          echo "macOS $(sw_vers -productVersion) · arch $(uname -m)"
+          echo "runner: $(sysctl -n hw.ncpu) CPUs"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # workflow_dispatch 时检出指定 tag
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup pnpm
@@ -38,21 +44,53 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and package
-        run: pnpm dist
-
-      - name: Verify release artifacts
+      - name: Print electron version
         run: |
-          echo "---- release directory ----"
-          ls -lah release/ || true
-          echo "---- match *.dmg ----"
-          ls -lah release/*.dmg || true
+          if [ -d node_modules/electron/dist ]; then
+            echo "electron dist found: $(node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --version 2>/dev/null || echo 'unknown')"
+          else
+            echo "WARNING: node_modules/electron/dist NOT FOUND"
+          fi
 
-      - name: Create Release and Upload Assets
+      - name: Build and package
+        id: build
+        # continue-on-error = true 让后续步骤能上传日志，方便排查失败原因
+        continue-on-error: true
+        run: bash -x build.sh 2>&1 | tee build.log
+        shell: bash
+
+      - name: Upload build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 15
+
+      - name: Check build result
+        if: always()
+        run: |
+          echo "========== release directory =========="
+          ls -lahR release/ 2>/dev/null || echo "(no release directory)"
+          echo "========== matching *.dmg ============="
+          ls -lah release/*.dmg 2>/dev/null || echo "(no .dmg found)"
+
+      - name: Create Release and Upload .dmg
+        # 仅构建成功时才上传
+        if: steps.build.outcome == 'success'
         uses: softprops/action-gh-release@v2
         with:
-          # 兼容手动触发时指定 tag
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: release/*.dmg
           generate_release_notes: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build failed — check log
+        if: steps.build.outcome != 'success'
+        run: |
+          echo "============================================================"
+          echo " BUIL.SH FAILED — download the build-log artifact for details"
+          echo "============================================================"
+          echo " Tail of build.log:"
+          tail -100 build.log 2>/dev/null || true
+          exit 1
