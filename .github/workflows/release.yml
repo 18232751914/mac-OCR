@@ -39,14 +39,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # electron 43 要求 Node >= 22.12.0
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Rebuild electron binary
-        run: pnpm rebuild electron
+      - name: Download Electron binary
+        run: node node_modules/electron/install.js
 
       - name: Verify electron dist
         run: |
