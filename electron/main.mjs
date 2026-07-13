@@ -65,6 +65,7 @@ let panelWindow = null;
 let resultWindow = null;
 let settingsWindow = null;
 let overlayWindows = [];
+let captureStarting = false;
 let longToolbarWindow = null;
 let stitcherWindow = null;
 let stitcherReadyPromise = null;
@@ -1392,11 +1393,19 @@ function updateShortcutPreference(mode, accelerator) {
  * @returns { success } 是否成功发起
  */
 async function startScreenCapture(mode = 'single') {
-  if (hostState.activeCaptureSession || hostState.longCaptureSession) {
+  // Guard against re-entrant triggers. `activeCaptureSession` is only set
+  // *after* the long `await`s below (getSources + did-finish-load wait).
+  // Without this flag, a second shortcut press during those awaits would
+  // pass the check below and call ensureOverlayWindowsForDisplays() ->
+  // closeCaptureOverlay(), destroying the windows this invocation is still
+  // using — which later throws "Object has been destroyed" at `.focus()`.
+  if (captureStarting || hostState.activeCaptureSession || hostState.longCaptureSession) {
     hostState.captureErrorMessage = '当前已有截图会话进行中，请先完成或取消当前会话。';
     broadcastShellState();
     return { success: false };
   }
+  captureStarting = true;
+  try {
 
   hostState.captureErrorMessage = null;
   refreshPermissionState();
@@ -1517,8 +1526,15 @@ async function startScreenCapture(mode = 'single') {
     }
   }
 
-  overlayWindows[0]?.focus();
+  // `?.` only guards against null/undefined — a destroyed BrowserWindow still
+  // throws "Object has been destroyed" on .focus(). Guard explicitly.
+  if (overlayWindows[0] && !overlayWindows[0].isDestroyed()) {
+    overlayWindows[0].focus();
+  }
   return { success: true };
+  } finally {
+    captureStarting = false;
+  }
 }
 
 /**
