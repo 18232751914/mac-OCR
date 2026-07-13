@@ -3,7 +3,14 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      # 兼容大小写 tag：v0.0.1 / V0.0.1
+      - '[vV]*'
+  # 允许手动选择已有 tag 重新触发（修复历史 release 缺少 .dmg 时用）
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要重新发布 assets 的 tag（例如 V0.0.1）'
+        required: true
 
 permissions:
   contents: write
@@ -15,6 +22,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # workflow_dispatch 时检出指定 tag
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -31,7 +41,18 @@ jobs:
       - name: Build and package
         run: pnpm dist
 
+      - name: Verify release artifacts
+        run: |
+          echo "---- release directory ----"
+          ls -lah release/ || true
+          echo "---- match *.dmg ----"
+          ls -lah release/*.dmg || true
+
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
+          # 兼容手动触发时指定 tag
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: release/*.dmg
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
