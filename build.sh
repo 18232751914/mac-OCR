@@ -385,9 +385,7 @@ make_dmg() {
     # 需要先 open 窗口以初始化 container window，否则 toolbar/statusbar 等属性无法设置；
     # 背景图已缩放为窗口内容区尺寸，可完整显示。
     # 若后续设计稿调整，请同步修改 DMG_WIN_WIDTH / DMG_WIN_HEIGHT 与 icon 位置。
-    if [ -n "${CI:-}" ]; then
-      log "CI 环境：跳过 AppleScript/Finder 窗口配置。"
-    elif ! osascript <<EOF
+    if ! osascript <<EOF
 tell application "Finder"
   tell disk "$vol_name"
     open
@@ -422,13 +420,12 @@ EOF
   # hdiutil detach 不会通知 Finder 刷新缓存，导致 .DS_Store 丢失。
   # 注意：Finder eject 为异步操作，需确认设备真正释放，否则 hdiutil convert
   # 会因源 DMG 仍被占用而报"资源暂时不可用"（EAGAIN）。
-  # CI 环境下跳过 Finder eject，因为 headless runner 通常没有可用的 Finder/GUI。
-  if [ -z "${CI:-}" ]; then
-    log "卸载 DMG（Finder eject，确保视图设置持久化）…"
-    osascript -e "tell application \"Finder\" to eject disk \"$vol_name\"" 2>/dev/null || true
-  else
-    log "CI 环境：跳过 Finder eject，直接依赖 hdiutil detach。"
-  fi
+  # 通过 Finder eject 卸载（确保 .DS_Store 被 Finder 写入磁盘）。
+  # hdiutil detach 不会通知 Finder 刷新缓存，导致 .DS_Store 丢失。
+  # 注意：Finder eject 为异步操作，需确认设备真正释放，否则 hdiutil convert
+  # 会因源 DMG 仍被占用而报"资源暂时不可用"（EAGAIN）。
+  log "卸载 DMG（Finder eject，确保视图设置持久化）…"
+  osascript -e "tell application \"Finder\" to eject disk \"$vol_name\"" 2>/dev/null || true
 
   # 轮询等待卷从 /Volumes 消失（Finder eject 生效）。
   local wait_count=0
