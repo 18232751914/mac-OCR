@@ -16,6 +16,25 @@
  *
  * @type {import('electron-builder').Configuration}
  */
+const path = require('path');
+const fs = require('fs');
+
+/** 用 require.resolve 动态定位 electron 的 dist 目录，兼容 pnpm symlink 结构 */
+const electronDist = path.join(
+  path.dirname(require.resolve('electron/package.json')),
+  'dist',
+);
+
+/**
+ * 仅当 OCR 引擎二进制存在时才列为需要解包的资源。
+ * CI 环境可能因 swiftc 不可用而跳过编译，避免 electron-builder 报文件不存在。
+ */
+const ocrBin = 'electron/screen-ocr-engine.bin';
+const asarUnpack = ['electron/ocr.swift'];
+if (fs.existsSync(ocrBin)) {
+  asarUnpack.push(ocrBin);
+}
+
 const identity = process.env.CSC_NAME || null;
 const hasNotarizeCreds = identity && Boolean(
   (process.env.APPLE_API_KEY && process.env.APPLE_API_KEY_ID && process.env.APPLE_API_ISSUER)
@@ -25,7 +44,7 @@ const hasNotarizeCreds = identity && Boolean(
 module.exports = {
   appId: 'com.idl.ocr',
   productName: 'mac-OCR',
-  electronDist: 'node_modules/electron/dist',
+  electronDist,
   copyright: 'Copyright © 2026',
   directories: {
     output: 'release',
@@ -42,10 +61,7 @@ module.exports = {
     '!dist/**/*.map',
   ],
   asar: true,
-  asarUnpack: [
-    'electron/ocr.swift',
-    'electron/screen-ocr-engine.bin',
-  ],
+  asarUnpack,
   npmRebuild: false,
   nodeGypRebuild: false,
   compression: 'maximum',
