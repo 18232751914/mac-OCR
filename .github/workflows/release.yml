@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Rebuild electron binary
+        run: pnpm rebuild electron
+
       - name: Verify electron dist
         run: |
           dist="$(node -p "path.resolve(path.dirname(require.resolve('electron/package.json')), 'dist')")"
