@@ -45,12 +45,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Print electron version
+      - name: Verify electron dist
         run: |
-          if [ -d node_modules/electron/dist ]; then
-            echo "electron dist found: $(node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --version 2>/dev/null || echo 'unknown')"
+          dist="$(node -p "path.resolve(path.dirname(require.resolve('electron/package.json')), 'dist')")"
+          echo "electron dist resolved: $dist"
+          if [ -d "$dist" ] && [ -d "$dist/Electron.app" ]; then
+            echo "Electron.app exists"
+            "$dist/Electron.app/Contents/MacOS/Electron" --version 2>/dev/null || true
           else
-            echo "WARNING: node_modules/electron/dist NOT FOUND"
+            echo "ERROR: Electron.app not found in electron dist"
+            echo "This usually means pnpm did not run electron's postinstall script."
+            exit 1
           fi
 
       - name: Build and package

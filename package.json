@@ -25,6 +25,11 @@
     "dist":"./build.sh"
   },
   "main": "electron/main.mjs",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "class-variance-authority": "^0.7.1",
